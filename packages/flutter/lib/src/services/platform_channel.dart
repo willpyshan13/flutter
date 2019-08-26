@@ -7,9 +7,10 @@ import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart';
 
+import 'binary_messenger.dart';
+import 'binding.dart';
 import 'message_codec.dart';
 import 'message_codecs.dart';
-import 'platform_messages.dart';
 
 /// A named channel for communicating with platform plugins using asynchronous
 /// message passing.
@@ -27,12 +28,16 @@ import 'platform_messages.dart';
 /// The logical identity of the channel is given by its name. Identically named
 /// channels will interfere with each other's communication.
 ///
-/// See: <https://flutter.io/platform-channels/>
+/// See: <https://flutter.dev/platform-channels/>
 class BasicMessageChannel<T> {
-  /// Creates a [BasicMessageChannel] with the specified [name] and [codec].
+  /// Creates a [BasicMessageChannel] with the specified [name], [codec] and [binaryMessenger].
   ///
-  /// Neither [name] nor [codec] may be null.
-  const BasicMessageChannel(this.name, this.codec);
+  /// The [name] and [codec] arguments cannot be null. The default [ServicesBinding.defaultBinaryMessenger]
+  /// instance is used if [binaryMessenger] is null.
+  const BasicMessageChannel(this.name, this.codec, { BinaryMessenger binaryMessenger })
+      : assert(name != null),
+        assert(codec != null),
+        _binaryMessenger = binaryMessenger;
 
   /// The logical channel on which communication happens, not null.
   final String name;
@@ -40,12 +45,16 @@ class BasicMessageChannel<T> {
   /// The message codec used by this channel, not null.
   final MessageCodec<T> codec;
 
+  /// The messenger which sends the bytes for this channel, not null.
+  BinaryMessenger get binaryMessenger => _binaryMessenger ?? defaultBinaryMessenger; // ignore: deprecated_member_use_from_same_package
+  final BinaryMessenger _binaryMessenger;
+
   /// Sends the specified [message] to the platform plugins on this channel.
   ///
   /// Returns a [Future] which completes to the received response, which may
   /// be null.
   Future<T> send(T message) async {
-    return codec.decodeMessage(await BinaryMessages.send(name, codec.encodeMessage(message)));
+    return codec.decodeMessage(await binaryMessenger.send(name, codec.encodeMessage(message)));
   }
 
   /// Sets a callback for receiving messages from the platform plugins on this
@@ -59,9 +68,9 @@ class BasicMessageChannel<T> {
   /// message reply. It may be null.
   void setMessageHandler(Future<T> handler(T message)) {
     if (handler == null) {
-      BinaryMessages.setMessageHandler(name, null);
+      binaryMessenger.setMessageHandler(name, null);
     } else {
-      BinaryMessages.setMessageHandler(name, (ByteData message) async {
+      binaryMessenger.setMessageHandler(name, (ByteData message) async {
         return codec.encodeMessage(await handler(codec.decodeMessage(message)));
       });
     }
@@ -80,9 +89,9 @@ class BasicMessageChannel<T> {
   /// sent to platform plugins.
   void setMockMessageHandler(Future<T> handler(T message)) {
     if (handler == null) {
-      BinaryMessages.setMockMessageHandler(name, null);
+      binaryMessenger.setMockMessageHandler(name, null);
     } else {
-      BinaryMessages.setMockMessageHandler(name, (ByteData message) async {
+      binaryMessenger.setMockMessageHandler(name, (ByteData message) async {
         return codec.encodeMessage(await handler(codec.decodeMessage(message)));
       });
     }
@@ -105,21 +114,31 @@ class BasicMessageChannel<T> {
 /// The logical identity of the channel is given by its name. Identically named
 /// channels will interfere with each other's communication.
 ///
-/// See: <https://flutter.io/platform-channels/>
+/// See: <https://flutter.dev/platform-channels/>
 class MethodChannel {
   /// Creates a [MethodChannel] with the specified [name].
   ///
   /// The [codec] used will be [StandardMethodCodec], unless otherwise
   /// specified.
   ///
-  /// Neither [name] nor [codec] may be null.
-  const MethodChannel(this.name, [this.codec = const StandardMethodCodec()]);
+  /// The [name] and [codec] arguments cannot be null. The default [ServicesBinding.defaultBinaryMessenger]
+  /// instance is used if [binaryMessenger] is null.
+  const MethodChannel(this.name, [this.codec = const StandardMethodCodec(), BinaryMessenger binaryMessenger ])
+      : assert(name != null),
+        assert(codec != null),
+        _binaryMessenger = binaryMessenger;
 
   /// The logical channel on which communication happens, not null.
   final String name;
 
   /// The message codec used by this channel, not null.
   final MethodCodec codec;
+
+  /// The messenger used by this channel to send platform messages.
+  ///
+  /// The messenger may not be null.
+  BinaryMessenger get binaryMessenger => _binaryMessenger ?? defaultBinaryMessenger; // ignore: deprecated_member_use_from_same_package
+  final BinaryMessenger _binaryMessenger;
 
   /// Invokes a [method] on this channel with the specified [arguments].
   ///
@@ -148,7 +167,7 @@ class MethodChannel {
   /// {@tool sample}
   ///
   /// The code might be packaged up as a musical plugin, see
-  /// <https://flutter.io/developing-packages/>:
+  /// <https://flutter.dev/developing-packages/>:
   ///
   /// ```dart
   /// class Music {
@@ -287,12 +306,12 @@ class MethodChannel {
   ///    [StandardMethodCodec].
   ///  * [JSONMessageCodec] which defines the payload values supported by
   ///    [JSONMethodCodec].
-  ///  * <https://docs.flutter.io/javadoc/io/flutter/plugin/common/MethodCall.html>
+  ///  * <https://api.flutter.dev/javadoc/io/flutter/plugin/common/MethodCall.html>
   ///    for how to access method call arguments on Android.
   @optionalTypeArgs
   Future<T> invokeMethod<T>(String method, [ dynamic arguments ]) async {
     assert(method != null);
-    final ByteData result = await BinaryMessages.send(
+    final ByteData result = await binaryMessenger.send(
       name,
       codec.encodeMethodCall(MethodCall(method, arguments)),
     );
@@ -314,7 +333,7 @@ class MethodChannel {
   ///  * [invokeMethod], which this call delegates to.
   Future<List<T>> invokeListMethod<T>(String method, [ dynamic arguments ]) async {
     final List<dynamic> result = await invokeMethod<List<dynamic>>(method, arguments);
-    return result.cast<T>();
+    return result?.cast<T>();
   }
 
   /// An implementation of [invokeMethod] that can return typed maps.
@@ -328,7 +347,7 @@ class MethodChannel {
   ///  * [invokeMethod], which this call delegates to.
   Future<Map<K, V>> invokeMapMethod<K, V>(String method, [ dynamic arguments ]) async {
     final Map<dynamic, dynamic> result = await invokeMethod<Map<dynamic, dynamic>>(method, arguments);
-    return result.cast<K, V>();
+    return result?.cast<K, V>();
   }
 
   /// Sets a callback for receiving method calls on this channel.
@@ -346,7 +365,7 @@ class MethodChannel {
   /// similarly to what happens if no method call handler has been set.
   /// Any other exception results in an error envelope being sent.
   void setMethodCallHandler(Future<dynamic> handler(MethodCall call)) {
-    BinaryMessages.setMessageHandler(
+    binaryMessenger.setMessageHandler(
       name,
       handler == null ? null : (ByteData message) => _handleAsMethodCall(message, handler),
     );
@@ -371,7 +390,7 @@ class MethodChannel {
   /// [MethodCodec.encodeSuccessEnvelope], to act as if platform plugin had
   /// returned that value.
   void setMockMethodCallHandler(Future<dynamic> handler(MethodCall call)) {
-    BinaryMessages.setMockMessageHandler(
+    binaryMessenger.setMockMessageHandler(
       name,
       handler == null ? null : (ByteData message) => _handleAsMethodCall(message, handler),
     );
@@ -441,15 +460,19 @@ class OptionalMethodChannel extends MethodChannel {
 /// The logical identity of the channel is given by its name. Identically named
 /// channels will interfere with each other's communication.
 ///
-/// See: <https://flutter.io/platform-channels/>
+/// See: <https://flutter.dev/platform-channels/>
 class EventChannel {
   /// Creates an [EventChannel] with the specified [name].
   ///
   /// The [codec] used will be [StandardMethodCodec], unless otherwise
   /// specified.
   ///
-  /// Neither [name] nor [codec] may be null.
-  const EventChannel(this.name, [this.codec = const StandardMethodCodec()]);
+  /// Neither [name] nor [codec] may be null. The default [ServicesBinding.defaultBinaryMessenger]
+  /// instance is used if [binaryMessenger] is null.
+  const EventChannel(this.name, [this.codec = const StandardMethodCodec(), BinaryMessenger binaryMessenger])
+      : assert(name != null),
+        assert(codec != null),
+        _binaryMessenger = binaryMessenger;
 
   /// The logical channel on which communication happens, not null.
   final String name;
@@ -457,14 +480,18 @@ class EventChannel {
   /// The message codec used by this channel, not null.
   final MethodCodec codec;
 
+  /// The messenger used by this channel to send platform messages, not null.
+  BinaryMessenger get binaryMessenger => _binaryMessenger ?? defaultBinaryMessenger; // ignore: deprecated_member_use_from_same_package
+  final BinaryMessenger _binaryMessenger;
+
   /// Sets up a broadcast stream for receiving events on this channel.
   ///
   /// Returns a broadcast [Stream] which emits events to listeners as follows:
   ///
   /// * a decoded data event (possibly null) for each successful event
-  /// received from the platform plugin;
+  ///   received from the platform plugin;
   /// * an error event containing a [PlatformException] for each error event
-  /// received from the platform plugin.
+  ///   received from the platform plugin.
   ///
   /// Errors occurring during stream activation or deactivation are reported
   /// through the [FlutterError] facility. Stream activation happens only when
@@ -474,7 +501,7 @@ class EventChannel {
     final MethodChannel methodChannel = MethodChannel(name, codec);
     StreamController<dynamic> controller;
     controller = StreamController<dynamic>.broadcast(onListen: () async {
-      BinaryMessages.setMessageHandler(name, (ByteData reply) async {
+      binaryMessenger.setMessageHandler(name, (ByteData reply) async {
         if (reply == null) {
           controller.close();
         } else {
@@ -493,11 +520,11 @@ class EventChannel {
           exception: exception,
           stack: stack,
           library: 'services library',
-          context: 'while activating platform stream on channel $name',
+          context: ErrorDescription('while activating platform stream on channel $name'),
         ));
       }
     }, onCancel: () async {
-      BinaryMessages.setMessageHandler(name, null);
+      binaryMessenger.setMessageHandler(name, null);
       try {
         await methodChannel.invokeMethod<void>('cancel', arguments);
       } catch (exception, stack) {
@@ -505,7 +532,7 @@ class EventChannel {
           exception: exception,
           stack: stack,
           library: 'services library',
-          context: 'while de-activating platform stream on channel $name',
+          context: ErrorDescription('while de-activating platform stream on channel $name'),
         ));
       }
     });

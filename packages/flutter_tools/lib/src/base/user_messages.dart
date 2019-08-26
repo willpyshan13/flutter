@@ -4,7 +4,7 @@
 
 import 'context.dart';
 
-UserMessages get userMessages => context[UserMessages];
+UserMessages get userMessages => context.get<UserMessages>();
 
 /// Class containing message strings that can be produced by Flutter tools.
 class UserMessages {
@@ -23,7 +23,7 @@ class UserMessages {
   String get flutterBinariesLinuxRepairCommands =>
       'On Debian/Ubuntu/Mint: sudo apt-get install lib32stdc++6\n'
       'On Fedora: dnf install libstdc++.i686\n'
-      'On Arch: pacman -S lib32-libstdc++5 (you need to enable multilib: https://wiki.archlinux.org/index.php/Official_repositories#multilib)';
+      'On Arch: pacman -S lib32-gcc-libs';
 
   // Messages used in NoIdeValidator
   String get noIdeStatusInfo => 'No supported IDEs installed';
@@ -33,7 +33,7 @@ class UserMessages {
   String intellijStatusInfo(String version) => 'version $version';
   String get intellijPluginInfo =>
       'For information about installing plugins, see\n'
-      'https://flutter.io/intellij-setup/#installing-the-plugins';
+      'https://flutter.dev/intellij-setup/#installing-the-plugins';
   String intellijMinimumVersion(String minVersion) =>
       'This install is older than the minimum recommended version of $minVersion.';
   String intellijLocation(String installPath) => 'IntelliJ at $installPath';
@@ -65,7 +65,7 @@ class UserMessages {
       'Unable to locate Android SDK.\n'
       'Install Android Studio from: https://developer.android.com/studio/index.html\n'
       'On first launch it will assist you in installing the Android SDK components.\n'
-      '(or visit https://flutter.io/setup/#android-setup for detailed instructions).\n'
+      '(or visit https://flutter.dev/setup/#android-setup for detailed instructions).\n'
       'If the Android SDK has been installed to a custom location, set $envKey to that location.\n'
       'You may also want to add it to your PATH environment variable.\n';
   String androidSdkLocation(String directory) => 'Android SDK at $directory';
@@ -73,7 +73,7 @@ class UserMessages {
       'Platform $platform, build-tools $tools';
   String get androidSdkInstallHelp =>
       'Try re-installing or updating your Android SDK,\n'
-      'visit https://flutter.io/setup/#android-setup for detailed instructions.';
+      'visit https://flutter.dev/setup/#android-setup for detailed instructions.';
   String get androidMissingNdk => 'Android NDK location not configured (optional; useful for native profiling support)';
   String androidNdkLocation(String directory) => 'Android NDK at $directory';
   // Also occurs in AndroidLicenseValidator
@@ -92,7 +92,7 @@ class UserMessages {
       'Android license status unknown.\n'
       'Try re-installing or updating your Android SDK Manager.\n'
       'See https://developer.android.com/studio/#downloads or visit '
-      'https://flutter.io/setup/#android-setup for detailed instructions.';
+      'https://flutter.dev/setup/#android-setup for detailed instructions.';
   String androidSdkManagerOutdated(String managerPath) =>
       'A newer version of the Android SDK is required. To update, run:\n'
       '$managerPath --update\n';
@@ -101,12 +101,16 @@ class UserMessages {
   String androidMissingSdkManager(String sdkManagerPath) =>
       'Android sdkmanager tool not found ($sdkManagerPath).\n'
       'Try re-installing or updating your Android SDK,\n'
-      'visit https://flutter.io/setup/#android-setup for detailed instructions.';
+      'visit https://flutter.dev/setup/#android-setup for detailed instructions.';
+  String androidCannotRunSdkManager(String sdkManagerPath, String error) =>
+      'Android sdkmanager tool was found, but failed to run ($sdkManagerPath): "$error".\n'
+      'Try re-installing or updating your Android SDK,\n'
+      'visit https://flutter.dev/setup/#android-setup for detailed instructions.';
   String androidSdkBuildToolsOutdated(String managerPath, int sdkMinVersion, String buildToolsMinVersion) =>
       'Flutter requires Android SDK $sdkMinVersion and the Android BuildTools $buildToolsMinVersion\n'
       'To update using sdkmanager, run:\n'
       '  "$managerPath" "platforms;android-$sdkMinVersion" "build-tools;$buildToolsMinVersion"\n'
-      'or visit https://flutter.io/setup/#android-setup for detailed instructions.';
+      'or visit https://flutter.dev/setup/#android-setup for detailed instructions.';
 
   // Messages used in AndroidStudioValidator
   String androidStudioVersion(String version) => 'version $version';
@@ -124,62 +128,26 @@ class UserMessages {
       'but Android Studio not found at this location.';
   String get androidStudioInstallation =>
       'Android Studio not found; download from https://developer.android.com/studio/index.html\n'
-      '(or visit https://flutter.io/setup/#android-setup for detailed instructions).';
+      '(or visit https://flutter.dev/setup/#android-setup for detailed instructions).';
 
-  // Messages used in IOSValidator
-  String iOSXcodeLocation(String location) => 'Xcode at $location';
-  String iOSXcodeOutdated(int versionMajor, int versionMinor) =>
+  // Messages used in XcodeValidator
+  String xcodeLocation(String location) => 'Xcode at $location';
+  String xcodeOutdated(int versionMajor, int versionMinor) =>
       'Flutter requires a minimum Xcode version of $versionMajor.$versionMinor.0.\n'
       'Download the latest version or update via the Mac App Store.';
-  String get iOSXcodeEula => 'Xcode end user license agreement not signed; open Xcode or run the command \'sudo xcodebuild -license\'.';
-  String get iOSXcodeMissingSimct =>
+  String get xcodeEula => 'Xcode end user license agreement not signed; open Xcode or run the command \'sudo xcodebuild -license\'.';
+  String get xcodeMissingSimct =>
       'Xcode requires additional components to be installed in order to run.\n'
       'Launch Xcode and install additional required components when prompted.';
-  String get iOSXcodeMissing =>
+  String get xcodeMissing =>
       'Xcode not installed; this is necessary for iOS development.\n'
       'Download at https://developer.apple.com/xcode/download/.';
-  String get iOSXcodeIncomplete =>
+  String get xcodeIncomplete =>
       'Xcode installation is incomplete; a full installation is necessary for iOS development.\n'
       'Download at: https://developer.apple.com/xcode/download/\n'
       'Or install Xcode via the App Store.\n'
       'Once installed, run:\n'
       '  sudo xcode-select --switch /Applications/Xcode.app/Contents/Developer';
-  String get iOSIMobileDeviceMissing =>
-      'libimobiledevice and ideviceinstaller are not installed. To install with Brew, run:\n'
-      '  brew update\n'
-      '  brew install --HEAD usbmuxd\n'
-      '  brew link usbmuxd\n'
-      '  brew install --HEAD libimobiledevice\n'
-      '  brew install ideviceinstaller';
-  String get iOSIMobileDeviceBroken =>
-      'Verify that all connected devices have been paired with this computer in Xcode.\n'
-      'If all devices have been paired, libimobiledevice and ideviceinstaller may require updating.\n'
-      'To update with Brew, run:\n'
-      '  brew update\n'
-      '  brew uninstall --ignore-dependencies libimobiledevice\n'
-      '  brew uninstall --ignore-dependencies usbmuxd\n'
-      '  brew install --HEAD usbmuxd\n'
-      '  brew unlink usbmuxd\n'
-      '  brew link usbmuxd\n'
-      '  brew install --HEAD libimobiledevice\n'
-      '  brew install ideviceinstaller';
-  String get iOSDeviceInstallerMissing =>
-      'ideviceinstaller is not installed; this is used to discover connected iOS devices.\n'
-      'To install with Brew, run:\n'
-      '  brew install --HEAD usbmuxd\n'
-      '  brew link usbmuxd\n'
-      '  brew install --HEAD libimobiledevice\n'
-      '  brew install ideviceinstaller';
-  String iOSDeployVersion(String version) => 'ios-deploy $version';
-  String iOSDeployOutdated(String minVersion) =>
-      'ios-deploy out of date ($minVersion is required). To upgrade with Brew:\n'
-      '  brew upgrade ios-deploy';
-  String get iOSDeployMissing =>
-      'ios-deploy not installed. To install:\n'
-      '  brew install ios-deploy';
-  String get iOSBrewMissing =>
-      'Brew can be used to install tools for iOS device development.\n'
-      'Download brew at https://brew.sh/.';
 
   // Messages used in CocoaPodsValidator
   String cocoaPodsVersion(String version) => 'CocoaPods version $version';
@@ -204,11 +172,27 @@ class UserMessages {
       '$consequence\n'
       'To upgrade:\n'
       '$upgradeInstructions';
+  String cocoaPodsBrokenInstall(String consequence, String reinstallInstructions) =>
+      'CocoaPods installed but not working.\n'
+      '$consequence\n'
+      'To re-install CocoaPods, run:\n'
+      '$reinstallInstructions';
 
   // Messages used in VsCodeValidator
   String vsCodeVersion(String version) => 'version $version';
   String vsCodeLocation(String location) => 'VS Code at $location';
   String vsCodeFlutterExtensionMissing(String url) => 'Flutter extension not installed; install from\n$url';
+
+  // Messages used in VisualStudioValidator
+  String visualStudioVersion(String name, String version) => '$name version $version';
+  String visualStudioLocation(String location) => 'Visual Studio at $location';
+  String visualStudioMissingComponents(String workload, List<String> components) =>
+      'Visual Studio is missing necessary components. Please re-run the '
+      'Visual Studio installer for the "$workload" workload, and include these components:\n'
+      '  ${components.join('\n  ')}';
+  String get visualStudioMissing =>
+      'Visual Studio not installed; this is necessary for Windows development.\n'
+      'Download at https://visualstudio.microsoft.com/downloads/.';
 
   // Messages used in FlutterCommand
   String flutterElapsedTime(String name, String elapsedTime) => '"flutter $name" took $elapsedTime.';

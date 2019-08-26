@@ -7,6 +7,7 @@ import 'dart:async';
 import 'package:meta/meta.dart';
 
 import '../application_package.dart';
+import '../artifacts.dart';
 import '../base/file_system.dart';
 import '../base/io.dart';
 import '../base/logger.dart';
@@ -17,14 +18,12 @@ import '../build_info.dart';
 import '../convert.dart';
 import '../device.dart';
 import '../globals.dart';
+import '../project.dart';
 import '../protocol_discovery.dart';
+import '../reporting/reporting.dart';
 import 'code_signing.dart';
 import 'ios_workflow.dart';
 import 'mac.dart';
-
-const String _kIdeviceinstallerInstructions =
-    'To work with iOS devices, please install ideviceinstaller. To install, run:\n'
-    'brew install ideviceinstaller.';
 
 class IOSDeploy {
   const IOSDeploy();
@@ -36,9 +35,15 @@ class IOSDeploy {
     @required String bundlePath,
     @required List<String> launchArguments,
   }) async {
-    final List<String> launchCommand = <String>[
+    final String iosDeployPath = artifacts.getArtifactPath(Artifact.iosDeploy, platform: TargetPlatform.ios);
+    // TODO(fujino): remove fallback once g3 updated
+    const List<String> fallbackIosDeployPath = <String>[
       '/usr/bin/env',
       'ios-deploy',
+    ];
+    final List<String> commandList = iosDeployPath != null ? <String>[iosDeployPath] : fallbackIosDeployPath;
+    final List<String> launchCommand = <String>[
+      ...commandList,
       '--id',
       deviceId,
       '--bundle',
@@ -60,6 +65,7 @@ class IOSDeploy {
     // it.
     final Map<String, String> iosDeployEnv = Map<String, String>.from(platform.environment);
     iosDeployEnv['PATH'] = '/usr/bin:${iosDeployEnv['PATH']}';
+    iosDeployEnv.addEntries(<MapEntry<String, String>>[cache.dyLdLibEntry]);
 
     return await runCommandAndStreamOutput(
       launchCommand,
@@ -113,9 +119,24 @@ class IOSDevices extends PollingDeviceDiscovery {
 class IOSDevice extends Device {
   IOSDevice(String id, { this.name, String sdkVersion })
       : _sdkVersion = sdkVersion,
-        super(id) {
-    _installerPath = _checkForCommand('ideviceinstaller');
-    _iproxyPath = _checkForCommand('iproxy');
+        super(
+          id,
+          category: Category.mobile,
+          platformType: PlatformType.ios,
+          ephemeral: true,
+      ) {
+    if (!platform.isMacOS) {
+      assert(false, 'Control of iOS devices or simulators only supported on Mac OS.');
+      return;
+    }
+    _installerPath = artifacts.getArtifactPath(
+      Artifact.ideviceinstaller,
+      platform: TargetPlatform.ios,
+    ) ?? 'ideviceinstaller'; // TODO(fujino): remove fallback once g3 updated
+    _iproxyPath = artifacts.getArtifactPath(
+      Artifact.iproxy,
+      platform: TargetPlatform.ios
+    ) ?? 'iproxy'; // TODO(fujino): remove fallback once g3 updated
   }
 
   String _installerPath;
@@ -132,17 +153,23 @@ class IOSDevice extends Device {
   @override
   final String name;
 
-  Map<ApplicationPackage, _IOSDeviceLogReader> _logReaders;
+  Map<ApplicationPackage, DeviceLogReader> _logReaders;
 
-  _IOSDevicePortForwarder _portForwarder;
+  DevicePortForwarder _portForwarder;
 
   @override
   Future<bool> get isLocalEmulator async => false;
 
   @override
+  Future<String> get emulatorId async => null;
+
+  @override
   bool get supportsStartPaused => false;
 
   static Future<List<IOSDevice>> getAttachedDevices() async {
+    if (!platform.isMacOS) {
+      throw UnsupportedError('Control of iOS devices or simulators only supported on Mac OS.');
+    }
     if (!iMobileDevice.isInstalled)
       return <IOSDevice>[];
 
@@ -159,39 +186,28 @@ class IOSDevice extends Device {
       } on IOSDeviceNotFoundError catch (error) {
         // Unable to find device with given udid. Possibly a network device.
         printTrace('Error getting attached iOS device: $error');
+      } on IOSDeviceNotTrustedError catch (error) {
+        printTrace('Error getting attached iOS device information: $error');
+        UsageEvent('device', 'ios-trust-failure').send();
       }
     }
     return devices;
   }
 
-  static String _checkForCommand(
-    String command, [
-    String macInstructions = _kIdeviceinstallerInstructions,
-  ]) {
-    try {
-      command = runCheckedSync(<String>['which', command]).trim();
-    } catch (e) {
-      if (platform.isMacOS) {
-        printError('$command not found. $macInstructions');
-      } else {
-        printError('Cannot control iOS devices or simulators. $command is not available on your platform.');
-      }
-      return null;
-    }
-    return command;
-  }
-
   @override
   Future<bool> isAppInstalled(ApplicationPackage app) async {
+    RunResult apps;
     try {
-      final RunResult apps = await runCheckedAsync(<String>[_installerPath, '--list-apps']);
-      if (RegExp(app.id, multiLine: true).hasMatch(apps.stdout)) {
-        return true;
-      }
-    } catch (e) {
+      apps = await runCheckedAsync(
+        <String>[_installerPath, '--list-apps'],
+        environment: Map<String, String>.fromEntries(
+          <MapEntry<String, String>>[cache.dyLdLibEntry],
+        ),
+      );
+    } on ProcessException {
       return false;
     }
-    return false;
+    return RegExp(app.id, multiLine: true).hasMatch(apps.stdout);
   }
 
   @override
@@ -207,9 +223,15 @@ class IOSDevice extends Device {
     }
 
     try {
-      await runCheckedAsync(<String>[_installerPath, '-i', iosApp.deviceBundlePath]);
+      await runCheckedAsync(
+        <String>[_installerPath, '-i', iosApp.deviceBundlePath],
+        environment: Map<String, String>.fromEntries(
+          <MapEntry<String, String>>[cache.dyLdLibEntry],
+        ),
+      );
       return true;
-    } catch (e) {
+    } on ProcessException catch (error) {
+      printError(error.message);
       return false;
     }
   }
@@ -217,9 +239,15 @@ class IOSDevice extends Device {
   @override
   Future<bool> uninstallApp(ApplicationPackage app) async {
     try {
-      await runCheckedAsync(<String>[_installerPath, '-U', app.id]);
+      await runCheckedAsync(
+        <String>[_installerPath, '-U', app.id],
+        environment: Map<String, String>.fromEntries(
+          <MapEntry<String, String>>[cache.dyLdLibEntry],
+        ),
+      );
       return true;
-    } catch (e) {
+    } on ProcessException catch (error) {
+      printError(error.message);
       return false;
     }
   }
@@ -243,7 +271,7 @@ class IOSDevice extends Device {
       printTrace('Building ${package.name} for $id');
 
       final String cpuArchitecture = await iMobileDevice.getInfoForDevice(id, 'CPUArchitecture');
-      final IOSArch iosArch = getIOSArchForName(cpuArchitecture);
+      final DarwinArch iosArch = getIOSArchForName(cpuArchitecture);
 
       // Step 1: Build the precompiled/DBC application if necessary.
       final XcodeBuildResult buildResult = await buildXcodeProject(
@@ -279,10 +307,24 @@ class IOSDevice extends Device {
     if (debuggingOptions.startPaused)
       launchArguments.add('--start-paused');
 
+    if (debuggingOptions.disableServiceAuthCodes)
+      launchArguments.add('--disable-service-auth-codes');
+
+    if (debuggingOptions.dartFlags.isNotEmpty) {
+      final String dartFlags = debuggingOptions.dartFlags;
+      launchArguments.add('--dart-flags="$dartFlags"');
+    }
+
     if (debuggingOptions.useTestFonts)
       launchArguments.add('--use-test-fonts');
 
-    if (debuggingOptions.debuggingEnabled) {
+    // "--enable-checked-mode" and "--verify-entry-points" should always be
+    // passed when we launch debug build via "ios-deploy". However, we don't
+    // pass them if a certain environment variable is set to enable the
+    // "system_debug_ios" integration test in the CI, which simulates a
+    // home-screen launch.
+    if (debuggingOptions.debuggingEnabled &&
+        platform.environment['FLUTTER_TOOLS_DEBUG_WITHOUT_CHECKED_MODE'] != 'true') {
       launchArguments.add('--enable-checked-mode');
       launchArguments.add('--verify-entry-points');
     }
@@ -306,65 +348,55 @@ class IOSDevice extends Device {
     if (platformArgs['trace-startup'] ?? false)
       launchArguments.add('--trace-startup');
 
-    int installationResult = -1;
-    Uri localObservatoryUri;
+    final Status installStatus = logger.startProgress(
+        'Installing and launching...',
+        timeout: timeoutConfiguration.slowOperation);
+    try {
+      ProtocolDiscovery observatoryDiscovery;
+      if (debuggingOptions.debuggingEnabled) {
+        // Debugging is enabled, look for the observatory server port post launch.
+        printTrace('Debugging is enabled, connecting to observatory');
 
-    final Status installStatus = logger.startProgress('Installing and launching...', timeout: kSlowOperation);
+        // TODO(danrubel): The Android device class does something similar to this code below.
+        // The various Device subclasses should be refactored and common code moved into the superclass.
+        observatoryDiscovery = ProtocolDiscovery.observatory(
+          getLogReader(app: package),
+          portForwarder: portForwarder,
+          hostPort: debuggingOptions.observatoryPort,
+          ipv6: ipv6,
+        );
+      }
 
-    if (!debuggingOptions.debuggingEnabled) {
-      // If debugging is not enabled, just launch the application and continue.
-      printTrace('Debugging is not enabled');
-      installationResult = await const IOSDeploy().runApp(
+      final int installationResult = await const IOSDeploy().runApp(
         deviceId: id,
         bundlePath: bundle.path,
         launchArguments: launchArguments,
       );
-    } else {
-      // Debugging is enabled, look for the observatory server port post launch.
-      printTrace('Debugging is enabled, connecting to observatory');
+      if (installationResult != 0) {
+        printError('Could not install ${bundle.path} on $id.');
+        printError('Try launching Xcode and selecting "Product > Run" to fix the problem:');
+        printError('  open ios/Runner.xcworkspace');
+        printError('');
+        return LaunchResult.failed();
+      }
 
-      // TODO(danrubel): The Android device class does something similar to this code below.
-      // The various Device subclasses should be refactored and common code moved into the superclass.
-      final ProtocolDiscovery observatoryDiscovery = ProtocolDiscovery.observatory(
-        getLogReader(app: package),
-        portForwarder: portForwarder,
-        hostPort: debuggingOptions.observatoryPort,
-        ipv6: ipv6,
-      );
+      if (!debuggingOptions.debuggingEnabled) {
+        return LaunchResult.succeeded();
+      }
 
-      final Future<Uri> forwardObservatoryUri = observatoryDiscovery.uri;
-
-      final Future<int> launch = const IOSDeploy().runApp(
-        deviceId: id,
-        bundlePath: bundle.path,
-        launchArguments: launchArguments,
-      );
-
-      localObservatoryUri = await launch.then<Uri>((int result) async {
-        installationResult = result;
-
-        if (result != 0) {
-          printTrace('Failed to launch the application on device.');
-          return null;
-        }
-
+      try {
         printTrace('Application launched on the device. Waiting for observatory port.');
-        return await forwardObservatoryUri;
-      }).whenComplete(() {
-        observatoryDiscovery.cancel();
-      });
+        final Uri localUri = await observatoryDiscovery.uri;
+        return LaunchResult.succeeded(observatoryUri: localUri);
+      } catch (error) {
+        printError('Failed to establish a debug connection with $id: $error');
+        return LaunchResult.failed();
+      } finally {
+        await observatoryDiscovery?.cancel();
+      }
+    } finally {
+      installStatus.stop();
     }
-    installStatus.stop();
-
-    if (installationResult != 0) {
-      printError('Could not install ${bundle.path} on $id.');
-      printError('Try launching Xcode and selecting "Product > Run" to fix the problem:');
-      printError('  open ios/Runner.xcworkspace');
-      printError('');
-      return LaunchResult.failed();
-    }
-
-    return LaunchResult.succeeded(observatoryUri: localObservatoryUri);
   }
 
   @override
@@ -381,12 +413,23 @@ class IOSDevice extends Device {
 
   @override
   DeviceLogReader getLogReader({ ApplicationPackage app }) {
-    _logReaders ??= <ApplicationPackage, _IOSDeviceLogReader>{};
+    _logReaders ??= <ApplicationPackage, DeviceLogReader>{};
     return _logReaders.putIfAbsent(app, () => _IOSDeviceLogReader(this, app));
+  }
+
+  @visibleForTesting
+  void setLogReader(ApplicationPackage app, DeviceLogReader logReader) {
+    _logReaders ??= <ApplicationPackage, DeviceLogReader>{};
+    _logReaders[app] = logReader;
   }
 
   @override
   DevicePortForwarder get portForwarder => _portForwarder ??= _IOSDevicePortForwarder(this);
+
+  @visibleForTesting
+  set portForwarder(DevicePortForwarder forwarder) {
+    _portForwarder = forwarder;
+  }
 
   @override
   void clearLogs() { }
@@ -397,6 +440,11 @@ class IOSDevice extends Device {
   @override
   Future<void> takeScreenshot(File outputFile) async {
     await iMobileDevice.takeScreenshot(outputFile);
+  }
+
+  @override
+  bool isSupportedForProject(FlutterProject flutterProject) {
+    return flutterProject.ios.existsSync();
   }
 }
 
@@ -567,12 +615,17 @@ class _IOSDevicePortForwarder extends DevicePortForwarder {
     while (!connected) {
       printTrace('attempting to forward device port $devicePort to host port $hostPort');
       // Usage: iproxy LOCAL_TCP_PORT DEVICE_TCP_PORT UDID
-      process = await runCommand(<String>[
-        device._iproxyPath,
-        hostPort.toString(),
-        devicePort.toString(),
-        device.id,
-      ]);
+      process = await runCommand(
+        <String>[
+          device._iproxyPath,
+          hostPort.toString(),
+          devicePort.toString(),
+          device.id,
+        ],
+        environment: Map<String, String>.fromEntries(
+          <MapEntry<String, String>>[cache.dyLdLibEntry],
+        ),
+      );
       // TODO(ianh): This is a flakey race condition, https://github.com/libimobiledevice/libimobiledevice/issues/674
       connected = !await process.stdout.isEmpty.timeout(_kiProxyPortForwardTimeout, onTimeout: () => false);
       if (!connected) {

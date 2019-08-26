@@ -555,10 +555,16 @@ class _RenderSingleChildViewport extends RenderBox with RenderObjectWithChildMix
   }
 
   @override
-  bool hitTestChildren(HitTestResult result, { Offset position }) {
+  bool hitTestChildren(BoxHitTestResult result, { Offset position }) {
     if (child != null) {
-      final Offset transformed = position + -_paintOffset;
-      return child.hitTest(result, position: transformed);
+      return result.addWithPaintOffset(
+        offset: _paintOffset,
+        position: position,
+        hitTest: (BoxHitTestResult result, Offset transformed) {
+          assert(transformed == position + -_paintOffset);
+          return child.hitTest(result, position: transformed);
+        },
+      );
     }
     return false;
   }
@@ -570,7 +576,7 @@ class _RenderSingleChildViewport extends RenderBox with RenderObjectWithChildMix
       return RevealedOffset(offset: offset.pixels, rect: rect);
 
     final RenderBox targetBox = target;
-    final Matrix4 transform = targetBox.getTransformTo(this);
+    final Matrix4 transform = targetBox.getTransformTo(child);
     final Rect bounds = MatrixUtils.transformRect(transform, rect);
     final Size contentSize = child.size;
 

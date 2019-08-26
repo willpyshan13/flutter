@@ -7,6 +7,7 @@ import 'dart:io' show Platform;
 import 'dart:ui' as ui show Scene, SceneBuilder, Window;
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter/gestures.dart' show MouseTrackerAnnotation;
 import 'package:flutter/services.dart';
 import 'package:vector_math/vector_math_64.dart';
 
@@ -39,7 +40,7 @@ class ViewConfiguration {
   }
 
   @override
-  String toString() => '$size at ${devicePixelRatio}x';
+  String toString() => '$size at ${debugFormatDouble(devicePixelRatio)}x';
 }
 
 /// The root of the render tree.
@@ -84,7 +85,7 @@ class RenderView extends RenderObject with RenderObjectWithChildMixin<RenderBox>
     markNeedsLayout();
   }
 
-  ui.Window _window;
+  final ui.Window _window;
 
   /// Whether Flutter should automatically compute the desired system UI.
   ///
@@ -168,9 +169,22 @@ class RenderView extends RenderObject with RenderObjectWithChildMixin<RenderBox>
   /// normally be in physical (device) pixels.
   bool hitTest(HitTestResult result, { Offset position }) {
     if (child != null)
-      child.hitTest(result, position: position);
+      child.hitTest(BoxHitTestResult.wrap(result), position: position);
     result.add(HitTestEntry(this));
     return true;
+  }
+
+  /// Determines the set of mouse tracker annotations at the given position.
+  ///
+  /// See also:
+  ///
+  /// * [Layer.findAll], which is used by this method to find all
+  ///   [AnnotatedRegionLayer]s annotated for mouse tracking.
+  Iterable<MouseTrackerAnnotation> hitTestMouseTrackers(Offset position) {
+    // Layer hit testing is done using device pixels, so we have to convert
+    // the logical coordinates of the event location back to device pixels
+    // here.
+    return layer.findAll<MouseTrackerAnnotation>(position * configuration.devicePixelRatio);
   }
 
   @override
@@ -250,12 +264,13 @@ class RenderView extends RenderObject with RenderObjectWithChildMixin<RenderBox>
   }
 
   @override
+  // ignore: MUST_CALL_SUPER
   void debugFillProperties(DiagnosticPropertiesBuilder properties) {
     // call to ${super.debugFillProperties(description)} is omitted because the
     // root superclasses don't include any interesting information for this
     // class
     assert(() {
-      properties.add(DiagnosticsNode.message('debug mode enabled - ${Platform.operatingSystem}'));
+      properties.add(DiagnosticsNode.message('debug mode enabled - ${kIsWeb ? 'Web' :  Platform.operatingSystem}'));
       return true;
     }());
     properties.add(DiagnosticsProperty<Size>('window size', _window.physicalSize, tooltip: 'in physical pixels'));

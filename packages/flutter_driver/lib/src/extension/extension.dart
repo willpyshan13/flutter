@@ -17,9 +17,11 @@ import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import '../common/diagnostics_tree.dart';
 import '../common/error.dart';
 import '../common/find.dart';
 import '../common/frame_sync.dart';
+import '../common/geometry.dart';
 import '../common/gesture.dart';
 import '../common/health.dart';
 import '../common/message.dart';
@@ -27,6 +29,8 @@ import '../common/render_tree.dart';
 import '../common/request_data.dart';
 import '../common/semantics.dart';
 import '../common/text.dart';
+import '../common/wait.dart';
+import 'wait_conditions.dart';
 
 const String _extensionMethodName = 'driver';
 const String _extensionMethod = 'ext.flutter.$_extensionMethodName';
@@ -65,7 +69,7 @@ class _DriverBinding extends BindingBase with ServicesBinding, SchedulerBinding,
 /// Optionally you can pass a [DataHandler] callback. It will be called if the
 /// test calls [FlutterDriver.requestData].
 ///
-/// `slienceErrors` will prevent exceptions from being logged. This is useful
+/// `silenceErrors` will prevent exceptions from being logged. This is useful
 /// for tests where exceptions are expected. Defaults to false. Any errors
 /// will still be returned in the `response` field of the result json along
 /// with an `isError` boolean.
@@ -110,8 +114,13 @@ class FlutterDriverExtension {
       'tap': _tap,
       'waitFor': _waitFor,
       'waitForAbsent': _waitForAbsent,
-      'waitUntilNoTransientCallbacks': _waitUntilNoTransientCallbacks,
+      'waitForCondition': _waitForCondition,
+      'waitUntilNoTransientCallbacks': _waitUntilNoTransientCallbacks, // ignore: deprecated_member_use_from_same_package
+      'waitUntilNoPendingFrame': _waitUntilNoPendingFrame, // ignore: deprecated_member_use_from_same_package
+      'waitUntilFirstFrameRasterized': _waitUntilFirstFrameRasterized, // ignore: deprecated_member_use_from_same_package
       'get_semantics_id': _getSemanticsId,
+      'get_offset': _getOffset,
+      'get_diagnostics_tree': _getDiagnosticsTree,
     });
 
     _commandDeserializers.addAll(<String, CommandDeserializerCallback>{
@@ -128,8 +137,13 @@ class FlutterDriverExtension {
       'tap': (Map<String, String> params) => Tap.deserialize(params),
       'waitFor': (Map<String, String> params) => WaitFor.deserialize(params),
       'waitForAbsent': (Map<String, String> params) => WaitForAbsent.deserialize(params),
-      'waitUntilNoTransientCallbacks': (Map<String, String> params) => WaitUntilNoTransientCallbacks.deserialize(params),
+      'waitForCondition': (Map<String, String> params) => WaitForCondition.deserialize(params),
+      'waitUntilNoTransientCallbacks': (Map<String, String> params) => WaitUntilNoTransientCallbacks.deserialize(params), // ignore: deprecated_member_use_from_same_package
+      'waitUntilNoPendingFrame': (Map<String, String> params) => WaitUntilNoPendingFrame.deserialize(params), // ignore: deprecated_member_use_from_same_package
+      'waitUntilFirstFrameRasterized': (Map<String, String> params) => WaitUntilFirstFrameRasterized.deserialize(params), // ignore: deprecated_member_use_from_same_package
       'get_semantics_id': (Map<String, String> params) => GetSemanticsId.deserialize(params),
+      'get_offset': (Map<String, String> params) => GetOffset.deserialize(params),
+      'get_diagnostics_tree': (Map<String, String> params) => GetDiagnosticsTree.deserialize(params),
     });
 
     _finders.addAll(<String, FinderConstructor>{
@@ -139,6 +153,8 @@ class FlutterDriverExtension {
       'ByValueKey': (SerializableFinder finder) => _createByValueKeyFinder(finder),
       'ByType': (SerializableFinder finder) => _createByTypeFinder(finder),
       'PageBack': (SerializableFinder finder) => _createPageBackFinder(),
+      'Ancestor': (SerializableFinder finder) => _createAncestorFinder(finder),
+      'Descendant': (SerializableFinder finder) => _createDescendantFinder(finder),
     });
   }
 
@@ -178,6 +194,8 @@ class FlutterDriverExtension {
       if (commandHandler == null || commandDeserializer == null)
         throw 'Extension $_extensionMethod does not support command $commandKind';
       final Command command = commandDeserializer(params);
+      assert(WidgetsBinding.instance.isRootWidgetAttached || !command.requiresRootWidgetAttached,
+          'No root widget is attached; have you remembered to call runApp()?');
       Future<Result> responseFuture = commandHandler(command);
       if (command.timeout != null)
         responseFuture = responseFuture.timeout(command.timeout);
@@ -202,10 +220,17 @@ class FlutterDriverExtension {
     };
   }
 
-  Future<Health> _getHealth(Command command) async => Health(HealthStatus.ok);
+  Future<Health> _getHealth(Command command) async => const Health(HealthStatus.ok);
 
   Future<RenderTree> _getRenderTree(Command command) async {
     return RenderTree(RendererBinding.instance?.renderView?.toStringDeep());
+  }
+
+  // This can be used to wait for the first frame being rasterized during app launch.
+  @Deprecated('This method has been deprecated in favor of _waitForCondition.')
+  Future<Result> _waitUntilFirstFrameRasterized(Command command) async {
+    await WidgetsBinding.instance.waitUntilFirstFrameRasterized;
+    return null;
   }
 
   // Waits until at the end of a frame the provided [condition] is [true].
@@ -223,9 +248,6 @@ class FlutterDriverExtension {
 
   /// Runs `finder` repeatedly until it finds one or more [Element]s.
   Future<Finder> _waitForElement(Finder finder) async {
-    // TODO(mravn): This method depends on async execution. A refactoring
-    // for sync-async semantics is tracked in https://github.com/flutter/flutter/issues/16801.
-    await Future<void>.value(null);
     if (_frameSync)
       await _waitUntilFrame(() => SchedulerBinding.instance.transientCallbackCount == 0);
 
@@ -307,6 +329,22 @@ class FlutterDriverExtension {
     }, description: 'Material or Cupertino back button');
   }
 
+  Finder _createAncestorFinder(Ancestor arguments) {
+    return find.ancestor(
+      of: _createFinder(arguments.of),
+      matching: _createFinder(arguments.matching),
+      matchRoot: arguments.matchRoot,
+    );
+  }
+
+  Finder _createDescendantFinder(Descendant arguments) {
+    return find.descendant(
+      of: _createFinder(arguments.of),
+      matching: _createFinder(arguments.matching),
+      matchRoot: arguments.matchRoot,
+    );
+  }
+
   Finder _createFinder(SerializableFinder finder) {
     final FinderConstructor constructor = _finders[finder.finderType];
 
@@ -322,24 +360,61 @@ class FlutterDriverExtension {
       _createFinder(tapCommand.finder).hitTestable()
     );
     await _prober.tap(computedFinder);
-    return TapResult();
+    return const TapResult();
   }
 
   Future<WaitForResult> _waitFor(Command command) async {
     final WaitFor waitForCommand = command;
     await _waitForElement(_createFinder(waitForCommand.finder));
-    return WaitForResult();
+    return const WaitForResult();
   }
 
   Future<WaitForAbsentResult> _waitForAbsent(Command command) async {
     final WaitForAbsent waitForAbsentCommand = command;
     await _waitForAbsentElement(_createFinder(waitForAbsentCommand.finder));
-    return WaitForAbsentResult();
+    return const WaitForAbsentResult();
   }
 
+  Future<Result> _waitForCondition(Command command) async {
+    assert(command != null);
+    final WaitForCondition waitForConditionCommand = command;
+    final WaitCondition condition = deserializeCondition(waitForConditionCommand.condition);
+    await condition.wait();
+    return null;
+  }
+
+  @Deprecated('This method has been deprecated in favor of _waitForCondition.')
   Future<Result> _waitUntilNoTransientCallbacks(Command command) async {
     if (SchedulerBinding.instance.transientCallbackCount != 0)
       await _waitUntilFrame(() => SchedulerBinding.instance.transientCallbackCount == 0);
+    return null;
+  }
+
+  /// Returns a future that waits until no pending frame is scheduled (frame is synced).
+  ///
+  /// Specifically, it checks:
+  /// * Whether the count of transient callbacks is zero.
+  /// * Whether there's no pending request for scheduling a new frame.
+  ///
+  /// We consider the frame is synced when both conditions are met.
+  ///
+  /// This method relies on a Flutter Driver mechanism called "frame sync",
+  /// which waits for transient animations to finish. Persistent animations will
+  /// cause this to wait forever.
+  ///
+  /// If a test needs to interact with the app while animations are running, it
+  /// should avoid this method and instead disable the frame sync using
+  /// `set_frame_sync` method. See [FlutterDriver.runUnsynchronized] for more
+  /// details on how to do this. Note, disabling frame sync will require the
+  /// test author to use some other method to avoid flakiness.
+  ///
+  /// This method has been deprecated in favor of [_waitForCondition].
+  @Deprecated('This method has been deprecated in favor of _waitForCondition.')
+  Future<Result> _waitUntilNoPendingFrame(Command command) async {
+    await _waitUntilFrame(() {
+      return SchedulerBinding.instance.transientCallbackCount == 0
+          && !SchedulerBinding.instance.hasScheduledFrame;
+    });
     return null;
   }
 
@@ -356,6 +431,52 @@ class FlutterDriverExtension {
     if (node == null)
       throw StateError('No semantics data found');
     return GetSemanticsIdResult(node.id);
+  }
+
+  Future<GetOffsetResult> _getOffset(Command command) async {
+    final GetOffset getOffsetCommand = command;
+    final Finder finder = await _waitForElement(_createFinder(getOffsetCommand.finder));
+    final Element element = finder.evaluate().single;
+    final RenderBox box = element.renderObject;
+    Offset localPoint;
+    switch (getOffsetCommand.offsetType) {
+      case OffsetType.topLeft:
+        localPoint = Offset.zero;
+        break;
+      case OffsetType.topRight:
+        localPoint = box.size.topRight(Offset.zero);
+        break;
+      case OffsetType.bottomLeft:
+        localPoint = box.size.bottomLeft(Offset.zero);
+        break;
+      case OffsetType.bottomRight:
+        localPoint = box.size.bottomRight(Offset.zero);
+        break;
+      case OffsetType.center:
+        localPoint = box.size.center(Offset.zero);
+        break;
+    }
+    final Offset globalPoint = box.localToGlobal(localPoint);
+    return GetOffsetResult(dx: globalPoint.dx, dy: globalPoint.dy);
+  }
+
+  Future<DiagnosticsTreeResult> _getDiagnosticsTree(Command command) async {
+    final GetDiagnosticsTree diagnosticsCommand = command;
+    final Finder finder = await _waitForElement(_createFinder(diagnosticsCommand.finder));
+    final Element element = finder.evaluate().single;
+    DiagnosticsNode diagnosticsNode;
+    switch (diagnosticsCommand.diagnosticsType) {
+      case DiagnosticsType.renderObject:
+        diagnosticsNode = element.renderObject.toDiagnosticsNode();
+        break;
+      case DiagnosticsType.widget:
+        diagnosticsNode = element.toDiagnosticsNode();
+        break;
+    }
+    return DiagnosticsTreeResult(diagnosticsNode.toJsonMap(DiagnosticsSerializationDelegate(
+      subtreeDepth: diagnosticsCommand.subtreeDepth,
+      includeProperties: diagnosticsCommand.includeProperties,
+    )));
   }
 
   Future<ScrollResult> _scroll(Command command) async {
@@ -379,14 +500,14 @@ class FlutterDriverExtension {
     }
     _prober.binding.dispatchEvent(pointer.up(), hitTest);
 
-    return ScrollResult();
+    return const ScrollResult();
   }
 
   Future<ScrollResult> _scrollIntoView(Command command) async {
     final ScrollIntoView scrollIntoViewCommand = command;
     final Finder target = await _waitForElement(_createFinder(scrollIntoViewCommand.finder));
     await Scrollable.ensureVisible(target.evaluate().single, duration: const Duration(milliseconds: 100), alignment: scrollIntoViewCommand.alignment ?? 0.0);
-    return ScrollResult();
+    return const ScrollResult();
   }
 
   Future<GetTextResult> _getText(Command command) async {
@@ -404,7 +525,7 @@ class FlutterDriverExtension {
     } else {
       _testTextInput.unregister();
     }
-    return SetTextEntryEmulationResult();
+    return const SetTextEntryEmulationResult();
   }
 
   Future<EnterTextResult> _enterText(Command command) async {
@@ -414,7 +535,7 @@ class FlutterDriverExtension {
     }
     final EnterText enterTextCommand = command;
     _testTextInput.enterText(enterTextCommand.text);
-    return EnterTextResult();
+    return const EnterTextResult();
   }
 
   Future<RequestDataResult> _requestData(Command command) async {
@@ -425,7 +546,7 @@ class FlutterDriverExtension {
   Future<SetFrameSyncResult> _setFrameSync(Command command) async {
     final SetFrameSync setFrameSyncCommand = command;
     _frameSync = setFrameSyncCommand.enabled;
-    return SetFrameSyncResult();
+    return const SetFrameSyncResult();
   }
 
   SemanticsHandle _semantics;

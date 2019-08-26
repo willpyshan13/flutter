@@ -47,6 +47,13 @@ TaskFunction createPlatformChannelSampleTest() {
   );
 }
 
+TaskFunction createPlatformChannelSwiftSampleTest() {
+  return DriverTest(
+    '${flutterDirectory.path}/examples/platform_channel_swift',
+    'test_driver/button_tap.dart',
+  );
+}
+
 TaskFunction createEmbeddedAndroidViewsIntegrationTest() {
   return DriverTest(
     '${flutterDirectory.path}/dev/integration_tests/android_views',
@@ -71,6 +78,13 @@ TaskFunction createCodegenerationIntegrationTest() {
   );
 }
 
+TaskFunction createImageLoadingIntegrationTest() {
+  return DriverTest(
+    '${flutterDirectory.path}/dev/integration_tests/image_loading',
+    'lib/main.dart',
+  );
+}
+
 TaskFunction createFlutterCreateOfflineTest() {
   return () async {
     final Directory tempDir = Directory.systemTemp.createTempSync('flutter_create_test.');
@@ -85,6 +99,13 @@ TaskFunction createFlutterCreateOfflineTest() {
     }
     return TaskResult.success(null);
   };
+}
+
+TaskFunction createAndroidSplashScreenKitchenSinkTest() {
+  return DriverTest(
+    '${flutterDirectory.path}/dev/integration_tests/android_splash_screens/splash_screen_kitchen_sink',
+    'test_driver/main.dart',
+  );
 }
 
 class DriverTest {
@@ -117,8 +138,8 @@ class DriverTest {
         testTarget,
         '-d',
         deviceId,
+        ...extraOptions,
       ];
-      options.addAll(extraOptions);
       await flutter('drive', options: options, environment: Map<String, String>.from(environment));
 
       return TaskResult.success(null);

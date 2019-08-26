@@ -23,7 +23,7 @@ const FileSystem _kLocalFs = LocalFileSystem();
 ///
 /// By default it uses local disk-based implementation. Override this in tests
 /// with [MemoryFileSystem].
-FileSystem get fs => context[FileSystem] ?? _kLocalFs;
+FileSystem get fs => context.get<FileSystem>() ?? _kLocalFs;
 
 /// Gets a [FileSystem] that will record file system activity to the specified
 /// base recording [location].
@@ -156,4 +156,14 @@ bool isOlderThanReference({ @required FileSystemEntity entity, @required File re
     return true;
   return referenceFile.existsSync()
       && referenceFile.lastModifiedSync().isAfter(entity.statSync().modified);
+}
+
+/// Exception indicating that a file that was expected to exist was not found.
+class FileNotFoundException implements IOException {
+  const FileNotFoundException(this.path);
+
+  final String path;
+
+  @override
+  String toString() => 'File not found: $path';
 }

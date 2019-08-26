@@ -2,8 +2,6 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import 'dart:io';
-
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
@@ -801,12 +799,12 @@ void main() {
 
       await expectLater(
         find.byType(RepaintBoundary).last,
-        matchesGoldenFile('nav_bar_test.standard_title.1.png'),
+        matchesGoldenFile(
+          'nav_bar_test.standard_title.png',
+          version: 1,
+        ),
       );
     },
-    // TODO(xster): remove once https://github.com/flutter/flutter/issues/17483
-    // is fixed.
-    skip: !Platform.isLinux,
   );
 
   testWidgets(
@@ -835,13 +833,13 @@ void main() {
 
       await expectLater(
         find.byType(RepaintBoundary).last,
-        matchesGoldenFile('nav_bar_test.large_title.1.png'),
+        matchesGoldenFile(
+          'nav_bar_test.large_title.png',
+          version: 1,
+        ),
       );
     },
-    // TODO(xster): remove once https://github.com/flutter/flutter/issues/17483
-    // is fixed.
-    skip: !Platform.isLinux,
-   );
+  );
 
 
   testWidgets('NavBar draws a light system bar for a dark background', (WidgetTester tester) async {
@@ -882,6 +880,228 @@ void main() {
       ),
     );
     expect(SystemChrome.latestStyle, SystemUiOverlayStyle.dark);
+  });
+
+  testWidgets('CupertinoNavigationBarBackButton shows an error when manually added outside a route', (WidgetTester tester) async {
+    await tester.pumpWidget(
+      const CupertinoNavigationBarBackButton()
+    );
+
+    final dynamic exception = tester.takeException();
+    expect(exception, isAssertionError);
+    expect(exception.toString(), contains('CupertinoNavigationBarBackButton should only be used in routes that can be popped'));
+  });
+
+  testWidgets('CupertinoNavigationBarBackButton shows an error when placed in a route that cannot be popped', (WidgetTester tester) async {
+    await tester.pumpWidget(
+      const CupertinoApp(
+        home: CupertinoNavigationBarBackButton(),
+      ),
+    );
+
+    final dynamic exception = tester.takeException();
+    expect(exception, isAssertionError);
+    expect(exception.toString(), contains('CupertinoNavigationBarBackButton should only be used in routes that can be popped'));
+  });
+
+  testWidgets('CupertinoNavigationBarBackButton with a custom onPressed callback can be placed anywhere', (WidgetTester tester) async {
+    bool backPressed = false;
+
+    await tester.pumpWidget(
+      CupertinoApp(
+        home: CupertinoNavigationBarBackButton(
+          onPressed: () => backPressed = true,
+        ),
+      ),
+    );
+
+    expect(tester.takeException(), isNull);
+    expect(find.text(String.fromCharCode(CupertinoIcons.back.codePoint)), findsOneWidget);
+
+    await tester.tap(find.byType(CupertinoNavigationBarBackButton));
+
+    expect(backPressed, true);
+  });
+
+  testWidgets(
+    'Manually inserted CupertinoNavigationBarBackButton still automatically '
+        'show previous page title when possible',
+    (WidgetTester tester) async {
+      await tester.pumpWidget(
+        const CupertinoApp(
+          home: Placeholder(),
+        ),
+      );
+
+      tester.state<NavigatorState>(find.byType(Navigator)).push(
+        CupertinoPageRoute<void>(
+          title: 'An iPod',
+          builder: (BuildContext context) {
+            return const CupertinoPageScaffold(
+              navigationBar: CupertinoNavigationBar(),
+              child: Placeholder(),
+            );
+          },
+        )
+      );
+
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 500));
+
+      tester.state<NavigatorState>(find.byType(Navigator)).push(
+        CupertinoPageRoute<void>(
+          title: 'A Phone',
+          builder: (BuildContext context) {
+            return const CupertinoNavigationBarBackButton();
+          },
+        )
+      );
+
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 500));
+
+      expect(find.widgetWithText(CupertinoButton, 'An iPod'), findsOneWidget);
+    }
+  );
+
+  testWidgets(
+    'CupertinoNavigationBarBackButton onPressed overrides default pop behavior',
+    (WidgetTester tester) async {
+      bool backPressed = false;
+      await tester.pumpWidget(
+        const CupertinoApp(
+          home: Placeholder(),
+        ),
+      );
+
+      tester.state<NavigatorState>(find.byType(Navigator)).push(
+        CupertinoPageRoute<void>(
+          title: 'An iPod',
+          builder: (BuildContext context) {
+            return const CupertinoPageScaffold(
+              navigationBar: CupertinoNavigationBar(),
+              child: Placeholder(),
+            );
+          },
+        )
+      );
+
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 500));
+
+      tester.state<NavigatorState>(find.byType(Navigator)).push(
+        CupertinoPageRoute<void>(
+          title: 'A Phone',
+          builder: (BuildContext context) {
+            return CupertinoPageScaffold(
+              navigationBar: CupertinoNavigationBar(
+                leading: CupertinoNavigationBarBackButton(
+                  onPressed: () => backPressed = true,
+                ),
+              ),
+              child: const Placeholder(),
+            );
+          },
+        )
+      );
+
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 500));
+
+      await tester.tap(find.byType(CupertinoNavigationBarBackButton));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 500));
+
+      // The second page is still on top and didn't pop.
+      expect(find.text('A Phone'), findsOneWidget);
+      // Custom onPressed called.
+      expect(backPressed, true);
+    }
+  );
+
+  testWidgets('textScaleFactor is set to 1.0', (WidgetTester tester) async {
+    await tester.pumpWidget(
+      CupertinoApp(
+        home: Builder(builder: (BuildContext context) {
+          return MediaQuery(
+            data: MediaQuery.of(context).copyWith(textScaleFactor: 99),
+            child: CupertinoPageScaffold(
+              child: CustomScrollView(
+                slivers: <Widget>[
+                  const CupertinoSliverNavigationBar(
+                    leading: Text('leading'),
+                    middle: Text('middle'),
+                    largeTitle: Text('Large Title'),
+                    trailing: Text('trailing'),
+                  ),
+                  SliverToBoxAdapter(
+                    child: Container(
+                      child: const Text('content'),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        }),
+      ),
+    );
+
+    final Iterable<RichText> barItems = tester.widgetList<RichText>(
+      find.descendant(
+        of: find.byType(CupertinoSliverNavigationBar),
+        matching: find.byType(RichText),
+      ),
+    );
+
+    final Iterable<RichText> contents = tester.widgetList<RichText>(
+      find.descendant(
+        of: find.text('content'),
+        matching: find.byType(RichText),
+      ),
+    );
+
+    expect(barItems.length, greaterThan(0));
+    expect(barItems.any((RichText t) => t.textScaleFactor != 1), isFalse);
+
+    expect(contents.length, greaterThan(0));
+    expect(contents.any((RichText t) => t.textScaleFactor != 99), isFalse);
+
+    // Also works with implicitly added widgets.
+    tester.state<NavigatorState>(find.byType(Navigator)).push(CupertinoPageRoute<void>(
+      title: 'title',
+      builder: (BuildContext context) {
+        return MediaQuery(
+          data: MediaQuery.of(context).copyWith(textScaleFactor: 99),
+          child: Container(
+            child: const CupertinoPageScaffold(
+              child: CustomScrollView(
+                slivers: <Widget>[
+                  CupertinoSliverNavigationBar(
+                    automaticallyImplyLeading: true,
+                    automaticallyImplyTitle: true,
+                    previousPageTitle: 'previous title',
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    ));
+
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 500));
+
+    final Iterable<RichText> barItems2 = tester.widgetList<RichText>(
+      find.descendant(
+        of: find.byType(CupertinoSliverNavigationBar),
+        matching: find.byType(RichText),
+      ),
+    );
+
+    expect(barItems2.length, greaterThan(0));
+    expect(barItems2.any((RichText t) => t.textScaleFactor != 1), isFalse);
   });
 }
 

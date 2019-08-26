@@ -23,11 +23,6 @@ import 'tabs.dart';
 import 'text_theme.dart';
 import 'theme.dart';
 
-// Examples can assume:
-// void _airDress() { }
-// void _restitchDress() { }
-// void _repairDress() { }
-
 const double _kLeadingWidth = kToolbarHeight; // So the leading button is square.
 
 // Bottom justify the kToolbarHeight child which may overflow the top.
@@ -68,9 +63,13 @@ class _ToolbarContainerLayout extends SingleChildLayoutDelegate {
 /// menu").
 ///
 /// App bars are typically used in the [Scaffold.appBar] property, which places
-/// the app bar as a fixed-height widget at the top of the screen. For a
-/// scrollable app bar, see [SliverAppBar], which embeds an [AppBar] in a sliver
-/// for use in a [CustomScrollView].
+/// the app bar as a fixed-height widget at the top of the screen. For a scrollable
+/// app bar, see [SliverAppBar], which embeds an [AppBar] in a sliver for use in
+/// a [CustomScrollView].
+///
+/// When not used as [Scaffold.appBar], or when wrapped in a [Hero], place the app
+/// bar in a [MediaQuery] to take care of the padding around the content of the
+/// app bar if needed, as the padding will not be handled by [Scaffold].
 ///
 /// The AppBar displays the toolbar widgets, [leading], [title], and [actions],
 /// above the [bottom] (if any). The [bottom] is usually used for a [TabBar]. If
@@ -90,29 +89,65 @@ class _ToolbarContainerLayout extends SingleChildLayoutDelegate {
 /// to false. In that case a null leading widget will result in the middle/title widget
 /// stretching to start.
 ///
-/// {@tool sample}
+/// {@tool snippet --template=stateless_widget_material}
+///
+/// This sample shows an [AppBar] with two simple actions. The first action
+/// opens a [SnackBar], while the second action navigates to a new page.
+///
+/// ```dart preamble
+/// final GlobalKey<ScaffoldState> scaffoldKey = GlobalKey<ScaffoldState>();
+/// final SnackBar snackBar = const SnackBar(content: Text('Showing Snackbar'));
+///
+/// void openPage(BuildContext context) {
+///   Navigator.push(context, MaterialPageRoute(
+///     builder: (BuildContext context) {
+///       return Scaffold(
+///         appBar: AppBar(
+///           title: const Text('Next page'),
+///         ),
+///         body: const Center(
+///           child: Text(
+///             'This is the next page',
+///             style: TextStyle(fontSize: 24),
+///           ),
+///         ),
+///       );
+///     },
+///   ));
+/// }
+/// ```
 ///
 /// ```dart
-/// AppBar(
-///   title: Text('My Fancy Dress'),
-///   actions: <Widget>[
-///     IconButton(
-///       icon: Icon(Icons.playlist_play),
-///       tooltip: 'Air it',
-///       onPressed: _airDress,
+/// Widget build(BuildContext context) {
+///   return Scaffold(
+///     key: scaffoldKey,
+///     appBar: AppBar(
+///       title: const Text('AppBar Demo'),
+///       actions: <Widget>[
+///         IconButton(
+///           icon: const Icon(Icons.add_alert),
+///           tooltip: 'Show Snackbar',
+///           onPressed: () {
+///             scaffoldKey.currentState.showSnackBar(snackBar);
+///           },
+///         ),
+///         IconButton(
+///           icon: const Icon(Icons.navigate_next),
+///           tooltip: 'Next page',
+///           onPressed: () {
+///             openPage(context);
+///           },
+///         ),
+///       ],
 ///     ),
-///     IconButton(
-///       icon: Icon(Icons.playlist_add),
-///       tooltip: 'Restitch it',
-///       onPressed: _restitchDress,
+///     body: const Center(
+///       child: Text(
+///         'This is the home page',
+///         style: TextStyle(fontSize: 24),
+///       ),
 ///     ),
-///     IconButton(
-///       icon: Icon(Icons.playlist_add_check),
-///       tooltip: 'Repair it',
-///       onPressed: _repairDress,
-///     ),
-///   ],
-/// )
+///   );
+/// }
 /// ```
 /// {@end-tool}
 ///
@@ -229,31 +264,6 @@ class AppBar extends StatefulWidget implements PreferredSizeWidget {
   /// Typically these widgets are [IconButton]s representing common operations.
   /// For less common operations, consider using a [PopupMenuButton] as the
   /// last action.
-  ///
-  /// {@tool snippet --template=stateless_widget_material}
-  ///
-  /// This sample shows adding an action to an [AppBar] that opens a shopping cart.
-  ///
-  /// ```dart
-  /// Widget build(BuildContext context) {
-  ///   return Scaffold(
-  ///     appBar: AppBar(
-  ///       title: Text('Ready, Set, Shop!'),
-  ///       actions: <Widget>[
-  ///         IconButton(
-  ///           icon: Icon(Icons.shopping_cart),
-  ///           tooltip: 'Open shopping cart',
-  ///           onPressed: () {
-  ///             // Implement navigation to shopping cart page here...
-  ///             print('Shopping cart opened.');
-  ///           },
-  ///         ),
-  ///       ],
-  ///     ),
-  ///   );
-  /// }
-  /// ```
-  /// {@end-tool}
   final List<Widget> actions;
 
   /// This widget is stacked behind the toolbar and the tab bar. It's height will
@@ -374,11 +384,11 @@ class AppBar extends StatefulWidget implements PreferredSizeWidget {
   @override
   final Size preferredSize;
 
-  bool _getEffectiveCenterTitle(ThemeData themeData) {
+  bool _getEffectiveCenterTitle(ThemeData theme) {
     if (centerTitle != null)
       return centerTitle;
-    assert(themeData.platform != null);
-    switch (themeData.platform) {
+    assert(theme.platform != null);
+    switch (theme.platform) {
       case TargetPlatform.android:
       case TargetPlatform.fuchsia:
         return false;
@@ -407,7 +417,7 @@ class _AppBarState extends State<AppBar> {
   Widget build(BuildContext context) {
     assert(!widget.primary || debugCheckHasMediaQuery(context));
     assert(debugCheckHasMaterialLocalizations(context));
-    final ThemeData themeData = Theme.of(context);
+    final ThemeData theme = Theme.of(context);
     final AppBarTheme appBarTheme = AppBarTheme.of(context);
     final ScaffoldState scaffold = Scaffold.of(context, nullOk: true);
     final ModalRoute<dynamic> parentRoute = ModalRoute.of(context);
@@ -419,16 +429,16 @@ class _AppBarState extends State<AppBar> {
 
     IconThemeData overallIconTheme = widget.iconTheme
       ?? appBarTheme.iconTheme
-      ?? themeData.primaryIconTheme;
+      ?? theme.primaryIconTheme;
     IconThemeData actionsIconTheme = widget.actionsIconTheme
       ?? appBarTheme.actionsIconTheme
       ?? overallIconTheme;
     TextStyle centerStyle = widget.textTheme?.title
       ?? appBarTheme.textTheme?.title
-      ?? themeData.primaryTextTheme.title;
+      ?? theme.primaryTextTheme.title;
     TextStyle sideStyle = widget.textTheme?.body1
       ?? appBarTheme.textTheme?.body1
-      ?? themeData.primaryTextTheme.body1;
+      ?? theme.primaryTextTheme.body1;
 
     if (widget.toolbarOpacity != 1.0) {
       final double opacity = const Interval(0.25, 1.0, curve: Curves.fastOutSlowIn).transform(widget.toolbarOpacity);
@@ -467,7 +477,7 @@ class _AppBarState extends State<AppBar> {
     Widget title = widget.title;
     if (title != null) {
       bool namesRoute;
-      switch (defaultTargetPlatform) {
+      switch (theme.platform) {
         case TargetPlatform.android:
         case TargetPlatform.fuchsia:
            namesRoute = true;
@@ -514,7 +524,7 @@ class _AppBarState extends State<AppBar> {
       leading: leading,
       middle: title,
       trailing: actions,
-      centerMiddle: widget._getEffectiveCenterTitle(themeData),
+      centerMiddle: widget._getEffectiveCenterTitle(theme),
       middleSpacing: widget.titleSpacing,
     );
 
@@ -574,7 +584,7 @@ class _AppBarState extends State<AppBar> {
     }
     final Brightness brightness = widget.brightness
       ?? appBarTheme.brightness
-      ?? themeData.primaryColorBrightness;
+      ?? theme.primaryColorBrightness;
     final SystemUiOverlayStyle overlayStyle = brightness == Brightness.dark
       ? SystemUiOverlayStyle.light
       : SystemUiOverlayStyle.dark;
@@ -586,7 +596,7 @@ class _AppBarState extends State<AppBar> {
         child: Material(
           color: widget.backgroundColor
             ?? appBarTheme.color
-            ?? themeData.primaryColor,
+            ?? theme.primaryColor,
           elevation: widget.elevation
             ?? appBarTheme.elevation
             ?? _defaultElevation,
@@ -677,6 +687,7 @@ class _SliverAppBarDelegate extends SliverPersistentHeaderDelegate {
     @required this.floating,
     @required this.pinned,
     @required this.snapConfiguration,
+    @required this.shape,
   }) : assert(primary || topPadding == 0.0),
        _bottomHeight = bottom?.preferredSize?.height ?? 0.0;
 
@@ -701,6 +712,7 @@ class _SliverAppBarDelegate extends SliverPersistentHeaderDelegate {
   final double topPadding;
   final bool floating;
   final bool pinned;
+  final ShapeBorder shape;
 
   final double _bottomHeight;
 
@@ -755,6 +767,7 @@ class _SliverAppBarDelegate extends SliverPersistentHeaderDelegate {
         primary: primary,
         centerTitle: centerTitle,
         titleSpacing: titleSpacing,
+        shape: shape,
         toolbarOpacity: toolbarOpacity,
         bottomOpacity: pinned ? 1.0 : (visibleMainHeight / _bottomHeight).clamp(0.0, 1.0),
       ),
@@ -799,6 +812,8 @@ class _SliverAppBarDelegate extends SliverPersistentHeaderDelegate {
 /// [TabBar] and a [FlexibleSpaceBar]. App bars typically expose one or more
 /// common actions with [IconButton]s which are optionally followed by a
 /// [PopupMenuButton] for less common operations.
+///
+/// {@youtube 560 315 https://www.youtube.com/watch?v=R9C5KMJKluE}
 ///
 /// Sliver app bars are typically used as the first child of a
 /// [CustomScrollView], which lets the app bar integrate with the scroll view so
@@ -896,6 +911,7 @@ class SliverAppBar extends StatefulWidget {
     this.floating = false,
     this.pinned = false,
     this.snap = false,
+    this.shape,
   }) : assert(automaticallyImplyLeading != null),
        assert(forceElevated != null),
        assert(primary != null),
@@ -1113,6 +1129,12 @@ class SliverAppBar extends StatefulWidget {
   ///    behavior of the app bar in combination with [floating].
   final bool pinned;
 
+  /// The material's shape as well its shadow.
+  ///
+  /// A shadow is only displayed if the [elevation] is greater than
+  /// zero.
+  final ShapeBorder shape;
+
   /// If [snap] and [floating] are true then the floating app bar will "snap"
   /// into view.
   ///
@@ -1209,6 +1231,7 @@ class _SliverAppBarState extends State<SliverAppBar> with TickerProviderStateMix
           topPadding: topPadding,
           floating: widget.floating,
           pinned: widget.pinned,
+          shape: widget.shape,
           snapConfiguration: _snapConfiguration,
         ),
       ),

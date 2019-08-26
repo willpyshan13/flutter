@@ -58,10 +58,11 @@ class FailingTestImageProvider extends TestImageProvider {
 
 Future<ImageInfo> extractOneFrame(ImageStream stream) {
   final Completer<ImageInfo> completer = Completer<ImageInfo>();
-  void listener(ImageInfo image, bool synchronousCall) {
+  ImageStreamListener listener;
+  listener = ImageStreamListener((ImageInfo image, bool synchronousCall) {
     completer.complete(image);
     stream.removeListener(listener);
-  }
+  });
   stream.addListener(listener);
   return completer.future;
 }
@@ -103,6 +104,32 @@ class ObtainKeyErrorImageProvider extends ImageProvider<ObtainKeyErrorImageProvi
   @override
   Future<ObtainKeyErrorImageProvider> obtainKey(ImageConfiguration configuration) {
     throw Error();
+  }
+}
+
+class LoadErrorImageProvider extends ImageProvider<LoadErrorImageProvider> {
+  @override
+  ImageStreamCompleter load(LoadErrorImageProvider key) {
+    throw Error();
+  }
+
+   @override
+  Future<LoadErrorImageProvider> obtainKey(ImageConfiguration configuration) {
+    return SynchronousFuture<LoadErrorImageProvider>(this);
+  }
+}
+
+class LoadErrorCompleterImageProvider extends ImageProvider<LoadErrorCompleterImageProvider> {
+  @override
+  ImageStreamCompleter load(LoadErrorCompleterImageProvider key) {
+    final Completer<void> completer = Completer<void>.sync();
+    completer.completeError(Error());
+    return OneFrameImageStreamCompleter(completer.future);
+  }
+
+   @override
+  Future<LoadErrorCompleterImageProvider> obtainKey(ImageConfiguration configuration) {
+    return SynchronousFuture<LoadErrorCompleterImageProvider>(this);
   }
 }
 

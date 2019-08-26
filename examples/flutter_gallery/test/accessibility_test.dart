@@ -472,15 +472,15 @@ void main() {
 
   group('All material demos meet text contrast guidelines', () {
     final List<ThemeData> themes = <ThemeData>[
-      kLightGalleryTheme.data,
+      kLightGalleryTheme,
       ThemeData.light(),
-      // TODO(hansmuller): add kDarkGalleryTheme.data, ThemeData.dark(), see #22044
+      // TODO(hansmuller): add kDarkGalleryTheme, ThemeData.dark(), see #22044
     ];
 
     const List<String> themeNames = <String>[
       'kLightGalleryTheme',
       'ThemeData.light()',
-      // TODO(hansmuller): add 'kDarkGalleryTheme', 'ThemeData.dark()', see 22044
+      // TODO(hansmuller): add 'kDarkGalleryTheme', 'ThemeData.dark()', see #22044
     ];
 
     for (int themeIndex = 0; themeIndex < themes.length; themeIndex += 1) {
@@ -501,7 +501,7 @@ void main() {
         await tester.pumpWidget(MaterialApp(theme: theme, home: BottomAppBarDemo()));
         await expectLater(tester, meetsGuideline(textContrastGuideline));
         handle.dispose();
-      });
+      }, skip: theme == ThemeData.light());
 
       testWidgets('bottom_navigation_demo $themeName', (WidgetTester tester) async {
         tester.binding.addTime(const Duration(seconds: 3));

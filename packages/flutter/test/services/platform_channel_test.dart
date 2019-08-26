@@ -6,14 +6,18 @@ import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:flutter/services.dart';
+import 'package:flutter_test/flutter_test.dart' show TestWidgetsFlutterBinding;
+
 import '../flutter_test_alternative.dart';
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+
   group('BasicMessageChannel', () {
     const MessageCodec<String> string = StringCodec();
     const BasicMessageChannel<String> channel = BasicMessageChannel<String>('ch', string);
     test('can send string message and get reply', () async {
-      BinaryMessages.setMockMessageHandler(
+      ServicesBinding.instance.defaultBinaryMessenger.setMockMessageHandler(
         'ch',
         (ByteData message) async => string.encodeMessage(string.decodeMessage(message) + ' world'),
       );
@@ -23,7 +27,7 @@ void main() {
     test('can receive string message and send reply', () async {
       channel.setMessageHandler((String message) async => message + ' world');
       String reply;
-      await BinaryMessages.handlePlatformMessage(
+      await ServicesBinding.instance.defaultBinaryMessenger.handlePlatformMessage(
         'ch',
         const StringCodec().encodeMessage('hello'),
         (ByteData replyBinary) {
@@ -39,7 +43,7 @@ void main() {
     const MethodCodec jsonMethod = JSONMethodCodec();
     const MethodChannel channel = MethodChannel('ch7', jsonMethod);
     test('can invoke method and get result', () async {
-      BinaryMessages.setMockMessageHandler(
+      ServicesBinding.instance.defaultBinaryMessenger.setMockMessageHandler(
         'ch7',
         (ByteData message) async {
           final Map<dynamic, dynamic> methodCall = jsonMessage.decodeMessage(message);
@@ -54,7 +58,7 @@ void main() {
       expect(result, equals('hello world'));
     });
     test('can invoke list method and get result', () async {
-      BinaryMessages.setMockMessageHandler(
+      ServicesBinding.instance.defaultBinaryMessenger.setMockMessageHandler(
         'ch7',
         (ByteData message) async {
           final Map<dynamic, dynamic> methodCall = jsonMessage.decodeMessage(message);
@@ -69,9 +73,24 @@ void main() {
       expect(await channel.invokeListMethod<String>('sayHello', 'hello'), <String>['hello', 'world']);
     });
 
+    test('can invoke list method and get null result', () async {
+      ServicesBinding.instance.defaultBinaryMessenger.setMockMessageHandler(
+        'ch7',
+        (ByteData message) async {
+          final Map<dynamic, dynamic> methodCall = jsonMessage.decodeMessage(message);
+          if (methodCall['method'] == 'sayHello') {
+            return jsonMessage.encodeMessage(<dynamic>[null]);
+          } else {
+            return jsonMessage.encodeMessage(<dynamic>['unknown', null, null]);
+          }
+        },
+      );
+      expect(await channel.invokeListMethod<String>('sayHello', 'hello'), null);
+    });
+
 
     test('can invoke map method and get result', () async {
-      BinaryMessages.setMockMessageHandler(
+      ServicesBinding.instance.defaultBinaryMessenger.setMockMessageHandler(
         'ch7',
         (ByteData message) async {
           final Map<dynamic, dynamic> methodCall = jsonMessage.decodeMessage(message);
@@ -86,8 +105,23 @@ void main() {
       expect(await channel.invokeMapMethod<String, String>('sayHello', 'hello'), <String, String>{'hello': 'world'});
     });
 
+    test('can invoke map method and get null result', () async {
+      ServicesBinding.instance.defaultBinaryMessenger.setMockMessageHandler(
+        'ch7',
+        (ByteData message) async {
+          final Map<dynamic, dynamic> methodCall = jsonMessage.decodeMessage(message);
+          if (methodCall['method'] == 'sayHello') {
+            return jsonMessage.encodeMessage(<dynamic>[null]);
+          } else {
+            return jsonMessage.encodeMessage(<dynamic>['unknown', null, null]);
+          }
+        },
+      );
+      expect(await channel.invokeMapMethod<String, String>('sayHello', 'hello'), null);
+    });
+
     test('can invoke method and get error', () async {
-      BinaryMessages.setMockMessageHandler(
+      ServicesBinding.instance.defaultBinaryMessenger.setMockMessageHandler(
         'ch7',
         (ByteData message) async {
           return jsonMessage.encodeMessage(<dynamic>[
@@ -109,7 +143,7 @@ void main() {
       }
     });
     test('can invoke unimplemented method', () async {
-      BinaryMessages.setMockMessageHandler(
+      ServicesBinding.instance.defaultBinaryMessenger.setMockMessageHandler(
         'ch7',
         (ByteData message) async => null,
       );
@@ -127,7 +161,7 @@ void main() {
       channel.setMethodCallHandler(null);
       final ByteData call = jsonMethod.encodeMethodCall(const MethodCall('sayHello', 'hello'));
       ByteData envelope;
-      await BinaryMessages.handlePlatformMessage('ch7', call, (ByteData result) {
+      await ServicesBinding.instance.defaultBinaryMessenger.handlePlatformMessage('ch7', call, (ByteData result) {
         envelope = result;
       });
       expect(envelope, isNull);
@@ -138,7 +172,7 @@ void main() {
       });
       final ByteData call = jsonMethod.encodeMethodCall(const MethodCall('sayHello', 'hello'));
       ByteData envelope;
-      await BinaryMessages.handlePlatformMessage('ch7', call, (ByteData result) {
+      await ServicesBinding.instance.defaultBinaryMessenger.handlePlatformMessage('ch7', call, (ByteData result) {
         envelope = result;
       });
       expect(envelope, isNull);
@@ -147,7 +181,7 @@ void main() {
       channel.setMethodCallHandler((MethodCall call) async => '${call.arguments}, world');
       final ByteData call = jsonMethod.encodeMethodCall(const MethodCall('sayHello', 'hello'));
       ByteData envelope;
-      await BinaryMessages.handlePlatformMessage('ch7', call, (ByteData result) {
+      await ServicesBinding.instance.defaultBinaryMessenger.handlePlatformMessage('ch7', call, (ByteData result) {
         envelope = result;
       });
       expect(jsonMethod.decodeEnvelope(envelope), equals('hello, world'));
@@ -158,7 +192,7 @@ void main() {
       });
       final ByteData call = jsonMethod.encodeMethodCall(const MethodCall('sayHello', 'hello'));
       ByteData envelope;
-      await BinaryMessages.handlePlatformMessage('ch7', call, (ByteData result) {
+      await ServicesBinding.instance.defaultBinaryMessenger.handlePlatformMessage('ch7', call, (ByteData result) {
         envelope = result;
       });
       try {
@@ -177,7 +211,7 @@ void main() {
       });
       final ByteData call = jsonMethod.encodeMethodCall(const MethodCall('sayHello', 'hello'));
       ByteData envelope;
-      await BinaryMessages.handlePlatformMessage('ch7', call, (ByteData result) {
+      await ServicesBinding.instance.defaultBinaryMessenger.handlePlatformMessage('ch7', call, (ByteData result) {
         envelope = result;
       });
       try {
@@ -196,7 +230,7 @@ void main() {
     const MethodCodec jsonMethod = JSONMethodCodec();
     const EventChannel channel = EventChannel('ch', jsonMethod);
     void emitEvent(dynamic event) {
-      BinaryMessages.handlePlatformMessage(
+      ServicesBinding.instance.defaultBinaryMessenger.handlePlatformMessage(
         'ch',
         event,
             (ByteData reply) { },
@@ -204,7 +238,7 @@ void main() {
     }
     test('can receive event stream', () async {
       bool canceled = false;
-      BinaryMessages.setMockMessageHandler(
+      ServicesBinding.instance.defaultBinaryMessenger.setMockMessageHandler(
         'ch',
         (ByteData message) async {
           final Map<dynamic, dynamic> methodCall = jsonMessage.decodeMessage(message);
@@ -228,7 +262,7 @@ void main() {
       expect(canceled, isTrue);
     });
     test('can receive error event', () async {
-      BinaryMessages.setMockMessageHandler(
+      ServicesBinding.instance.defaultBinaryMessenger.setMockMessageHandler(
         'ch',
         (ByteData message) async {
           final Map<dynamic, dynamic> methodCall = jsonMessage.decodeMessage(message);

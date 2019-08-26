@@ -38,19 +38,19 @@ void main() {
     final RenderObject target = tester.renderObject(find.byWidget(children[5], skipOffstage: false));
     RevealedOffset revealed = viewport.getOffsetToReveal(target, 0.0);
     expect(revealed.offset, 500.0);
-    expect(revealed.rect, Rect.fromLTWH(0.0, 0.0, 300.0, 100.0));
+    expect(revealed.rect, const Rect.fromLTWH(0.0, 0.0, 300.0, 100.0));
 
     revealed = viewport.getOffsetToReveal(target, 1.0);
     expect(revealed.offset, 400.0);
-    expect(revealed.rect, Rect.fromLTWH(0.0, 100.0, 300.0, 100.0));
+    expect(revealed.rect, const Rect.fromLTWH(0.0, 100.0, 300.0, 100.0));
 
-    revealed = viewport.getOffsetToReveal(target, 0.0, rect: Rect.fromLTWH(40.0, 40.0, 10.0, 10.0));
+    revealed = viewport.getOffsetToReveal(target, 0.0, rect: const Rect.fromLTWH(40.0, 40.0, 10.0, 10.0));
     expect(revealed.offset, 540.0);
-    expect(revealed.rect, Rect.fromLTWH(40.0, 0.0, 10.0, 10.0));
+    expect(revealed.rect, const Rect.fromLTWH(40.0, 0.0, 10.0, 10.0));
 
-    revealed = viewport.getOffsetToReveal(target, 1.0, rect: Rect.fromLTWH(40.0, 40.0, 10.0, 10.0));
+    revealed = viewport.getOffsetToReveal(target, 1.0, rect: const Rect.fromLTWH(40.0, 40.0, 10.0, 10.0));
     expect(revealed.offset, 350.0);
-    expect(revealed.rect, Rect.fromLTWH(40.0, 190.0, 10.0, 10.0));
+    expect(revealed.rect, const Rect.fromLTWH(40.0, 190.0, 10.0, 10.0));
   });
 
   testWidgets('Viewport getOffsetToReveal - right', (WidgetTester tester) async {
@@ -84,19 +84,19 @@ void main() {
     final RenderObject target = tester.renderObject(find.byWidget(children[5], skipOffstage: false));
     RevealedOffset revealed = viewport.getOffsetToReveal(target, 0.0);
     expect(revealed.offset, 500.0);
-    expect(revealed.rect, Rect.fromLTWH(0.0, 0.0, 100.0, 300.0));
+    expect(revealed.rect, const Rect.fromLTWH(0.0, 0.0, 100.0, 300.0));
 
     revealed = viewport.getOffsetToReveal(target, 1.0);
     expect(revealed.offset, 400.0);
-    expect(revealed.rect, Rect.fromLTWH(100.0, 0.0, 100.0, 300.0));
+    expect(revealed.rect, const Rect.fromLTWH(100.0, 0.0, 100.0, 300.0));
 
-    revealed = viewport.getOffsetToReveal(target, 0.0, rect: Rect.fromLTWH(40.0, 40.0, 10.0, 10.0));
+    revealed = viewport.getOffsetToReveal(target, 0.0, rect: const Rect.fromLTWH(40.0, 40.0, 10.0, 10.0));
     expect(revealed.offset, 540.0);
-    expect(revealed.rect, Rect.fromLTWH(0.0, 40.0, 10.0, 10.0));
+    expect(revealed.rect, const Rect.fromLTWH(0.0, 40.0, 10.0, 10.0));
 
-    revealed = viewport.getOffsetToReveal(target, 1.0, rect: Rect.fromLTWH(40.0, 40.0, 10.0, 10.0));
+    revealed = viewport.getOffsetToReveal(target, 1.0, rect: const Rect.fromLTWH(40.0, 40.0, 10.0, 10.0));
     expect(revealed.offset, 350.0);
-    expect(revealed.rect, Rect.fromLTWH(190.0, 40.0, 10.0, 10.0));
+    expect(revealed.rect, const Rect.fromLTWH(190.0, 40.0, 10.0, 10.0));
   });
 
   testWidgets('Viewport getOffsetToReveal - up', (WidgetTester tester) async {
@@ -130,19 +130,19 @@ void main() {
     final RenderObject target = tester.renderObject(find.byWidget(children[5], skipOffstage: false));
     RevealedOffset revealed = viewport.getOffsetToReveal(target, 0.0);
     expect(revealed.offset, 500.0);
-    expect(revealed.rect, Rect.fromLTWH(0.0, 100.0, 300.0, 100.0));
+    expect(revealed.rect, const Rect.fromLTWH(0.0, 100.0, 300.0, 100.0));
 
     revealed = viewport.getOffsetToReveal(target, 1.0);
     expect(revealed.offset, 400.0);
-    expect(revealed.rect, Rect.fromLTWH(0.0, 0.0, 300.0, 100.0));
+    expect(revealed.rect, const Rect.fromLTWH(0.0, 0.0, 300.0, 100.0));
 
-    revealed = viewport.getOffsetToReveal(target, 0.0, rect: Rect.fromLTWH(40.0, 40.0, 10.0, 10.0));
+    revealed = viewport.getOffsetToReveal(target, 0.0, rect: const Rect.fromLTWH(40.0, 40.0, 10.0, 10.0));
     expect(revealed.offset, 550.0);
-    expect(revealed.rect, Rect.fromLTWH(40.0, 190.0, 10.0, 10.0));
+    expect(revealed.rect, const Rect.fromLTWH(40.0, 190.0, 10.0, 10.0));
 
-    revealed = viewport.getOffsetToReveal(target, 1.0, rect: Rect.fromLTWH(40.0, 40.0, 10.0, 10.0));
+    revealed = viewport.getOffsetToReveal(target, 1.0, rect: const Rect.fromLTWH(40.0, 40.0, 10.0, 10.0));
     expect(revealed.offset, 360.0);
-    expect(revealed.rect, Rect.fromLTWH(40.0, 0.0, 10.0, 10.0));
+    expect(revealed.rect, const Rect.fromLTWH(40.0, 0.0, 10.0, 10.0));
   });
 
   testWidgets('Viewport getOffsetToReveal - left', (WidgetTester tester) async {
@@ -177,20 +177,20 @@ void main() {
     final RenderObject target = tester.renderObject(find.byWidget(children[5], skipOffstage: false));
     RevealedOffset revealed = viewport.getOffsetToReveal(target, 0.0);
     expect(revealed.offset, 500.0);
-    expect(revealed.rect, Rect.fromLTWH(100.0, 0.0, 100.0, 300.0));
+    expect(revealed.rect, const Rect.fromLTWH(100.0, 0.0, 100.0, 300.0));
 
     revealed = viewport.getOffsetToReveal(target, 1.0);
     expect(revealed.offset, 400.0);
-    expect(revealed.rect, Rect.fromLTWH(0.0, 0.0, 100.0, 300.0));
+    expect(revealed.rect, const Rect.fromLTWH(0.0, 0.0, 100.0, 300.0));
 
-    revealed = viewport.getOffsetToReveal(target, 0.0, rect: Rect.fromLTWH(40.0, 40.0, 10.0, 10.0));
+    revealed = viewport.getOffsetToReveal(target, 0.0, rect: const Rect.fromLTWH(40.0, 40.0, 10.0, 10.0));
     expect(revealed.offset, 550.0);
-    expect(revealed.rect, Rect.fromLTWH(190.0, 40.0, 10.0, 10.0));
+    expect(revealed.rect, const Rect.fromLTWH(190.0, 40.0, 10.0, 10.0));
 
-    revealed = viewport.getOffsetToReveal(target, 1.0, rect: Rect.fromLTWH(40.0, 40.0, 10.0, 10.0));
+    revealed = viewport.getOffsetToReveal(target, 1.0, rect: const Rect.fromLTWH(40.0, 40.0, 10.0, 10.0));
     expect(revealed.offset, 360.0);
-    expect(revealed.rect, Rect.fromLTWH(0.0, 40.0, 10.0, 10.0));
-  });
+    expect(revealed.rect, const Rect.fromLTWH(0.0, 40.0, 10.0, 10.0));
+  }, skip: isBrowser);
 
   testWidgets('Viewport getOffsetToReveal Sliver - down', (WidgetTester tester) async {
     final List<Widget> children = <Widget>[];
@@ -312,6 +312,107 @@ void main() {
 
     revealed = viewport.getOffsetToReveal(target, 1.0);
     expect(revealed.offset, 5 * (100 + 22 + 22) + 22 - 100);
+  });
+
+  testWidgets('Viewport getOffsetToReveal Sliver - up - reverse growth', (WidgetTester tester) async {
+    const Key centerKey = ValueKey<String>('center');
+    final Widget centerSliver = SliverPadding(
+      key: centerKey,
+      padding: const EdgeInsets.all(22.0),
+      sliver: SliverToBoxAdapter(
+        child: Container(
+          height: 100.0,
+          child: const Text('Tile center'),
+        ),
+      ),
+    );
+    final Widget lowerItem = Container(
+      height: 100.0,
+      child: const Text('Tile lower'),
+    );
+    final Widget lowerSliver = SliverPadding(
+      padding: const EdgeInsets.all(22.0),
+      sliver: SliverToBoxAdapter(
+        child: lowerItem,
+      ),
+    );
+
+    await tester.pumpWidget(
+      Directionality(
+        textDirection: TextDirection.ltr,
+        child: Center(
+          child: Container(
+            height: 200.0,
+            width: 300.0,
+            child: CustomScrollView(
+              center: centerKey,
+              reverse: true,
+              slivers: <Widget>[lowerSliver, centerSliver],
+            ),
+          ),
+        ),
+      ),
+    );
+
+    final RenderAbstractViewport viewport = tester.allRenderObjects.firstWhere((RenderObject r) => r is RenderAbstractViewport);
+
+    final RenderObject target = tester.renderObject(find.byWidget(lowerItem, skipOffstage: false));
+    RevealedOffset revealed = viewport.getOffsetToReveal(target, 0.0);
+    expect(revealed.offset, - 100 - 22);
+
+    revealed = viewport.getOffsetToReveal(target, 1.0);
+    expect(revealed.offset, - 100 - 22 - 100);
+  });
+
+  testWidgets('Viewport getOffsetToReveal Sliver - left - reverse growth', (WidgetTester tester) async {
+    const Key centerKey = ValueKey<String>('center');
+    final Widget centerSliver = SliverPadding(
+      key: centerKey,
+      padding: const EdgeInsets.all(22.0),
+      sliver: SliverToBoxAdapter(
+        child: Container(
+          width: 100.0,
+          child: const Text('Tile center'),
+        ),
+      ),
+    );
+    final Widget lowerItem = Container(
+      width: 100.0,
+      child: const Text('Tile lower'),
+    );
+    final Widget lowerSliver = SliverPadding(
+      padding: const EdgeInsets.all(22.0),
+      sliver: SliverToBoxAdapter(
+        child: lowerItem,
+      ),
+    );
+
+    await tester.pumpWidget(
+      Directionality(
+        textDirection: TextDirection.ltr,
+        child: Center(
+          child: Container(
+            height: 200.0,
+            width: 300.0,
+            child: CustomScrollView(
+              scrollDirection: Axis.horizontal,
+              center: centerKey,
+              reverse: true,
+              slivers: <Widget>[lowerSliver, centerSliver],
+            ),
+          ),
+        ),
+      ),
+    );
+
+    final RenderAbstractViewport viewport = tester.allRenderObjects.firstWhere((RenderObject r) => r is RenderAbstractViewport);
+
+    final RenderObject target = tester.renderObject(find.byWidget(lowerItem, skipOffstage: false));
+    RevealedOffset revealed = viewport.getOffsetToReveal(target, 0.0);
+    expect(revealed.offset, -100 - 22);
+
+    revealed = viewport.getOffsetToReveal(target, 1.0);
+    expect(revealed.offset, - 100 - 22 - 200);
   });
 
   testWidgets('Viewport getOffsetToReveal Sliver - left', (WidgetTester tester) async {
@@ -555,6 +656,71 @@ void main() {
         ),
       );
     }
+
+    testWidgets('Reverse List showOnScreen', (WidgetTester tester) async {
+      const double screenHeight = 400.0;
+      const double screenWidth = 400.0;
+      const double itemHeight = screenHeight / 10.0;
+      const ValueKey<String> centerKey = ValueKey<String>('center');
+
+      tester.binding.window.devicePixelRatioTestValue = 1.0;
+      tester.binding.window.physicalSizeTestValue = const Size(screenWidth, screenHeight);
+
+      await tester.pumpWidget(Directionality(
+        textDirection: TextDirection.ltr,
+        child: CustomScrollView(
+            center: centerKey,
+            reverse: true,
+            slivers: <Widget>[
+              SliverList(
+                delegate: SliverChildListDelegate(
+                  List<Widget>.generate(
+                    10,
+                        (int index) => SizedBox(
+                      height: itemHeight,
+                      child: Text('Item ${-index - 1}'),
+                    ),
+                  ),
+                ),
+              ),
+              SliverList(
+                key: centerKey,
+                delegate: SliverChildListDelegate(
+                  List<Widget>.generate(
+                    1,
+                        (int index) => const SizedBox(
+                      height: itemHeight,
+                      child: Text('Item 0'),
+                    ),
+                  ),
+                ),
+              ),
+              SliverList(
+                delegate: SliverChildListDelegate(
+                  List<Widget>.generate(
+                    10,
+                    (int index) => SizedBox(
+                      height: itemHeight,
+                      child: Text('Item ${index + 1}'),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+
+      expect(find.text('Item -1'), findsNothing);
+
+      final RenderBox itemNeg1 =
+        tester.renderObject(find.text('Item -1', skipOffstage: false));
+
+      itemNeg1.showOnScreen(duration: const Duration(seconds: 1));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Item -1'), findsOneWidget);
+    });
 
     testWidgets('in view in inner, but not in outer', (WidgetTester tester) async {
       final ScrollController inner = ScrollController();

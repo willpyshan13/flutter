@@ -415,4 +415,161 @@ void main() {
     expect(value, isFalse);
   });
 
+  testWidgets('Switch is translucent when disabled', (WidgetTester tester) async {
+    await tester.pumpWidget(
+      const Directionality(
+        textDirection: TextDirection.ltr,
+        child: Center(
+          child: CupertinoSwitch(
+            value: false,
+            dragStartBehavior: DragStartBehavior.down,
+            onChanged: null,
+          ),
+        )
+      ),
+    );
+
+    expect(find.byType(Opacity), findsOneWidget);
+    expect(tester.widget<Opacity>(find.byType(Opacity).first).opacity, 0.5);
+  });
+
+  testWidgets('Switch is opaque when enabled', (WidgetTester tester) async {
+    await tester.pumpWidget(
+      Directionality(
+        textDirection: TextDirection.ltr,
+        child: Center(
+          child: CupertinoSwitch(
+            value: false,
+            dragStartBehavior: DragStartBehavior.down,
+            onChanged: (bool newValue) {},
+          ),
+        )
+      ),
+    );
+
+    expect(find.byType(Opacity), findsOneWidget);
+    expect(tester.widget<Opacity>(find.byType(Opacity).first).opacity, 1.0);
+  });
+
+  testWidgets('Switch turns translucent after becoming disabled', (WidgetTester tester) async {
+    await tester.pumpWidget(
+      Directionality(
+        textDirection: TextDirection.ltr,
+        child: Center(
+          child: CupertinoSwitch(
+            value: false,
+            dragStartBehavior: DragStartBehavior.down,
+            onChanged: (bool newValue) {},
+          ),
+        )
+      ),
+    );
+
+    await tester.pumpWidget(
+      const Directionality(
+        textDirection: TextDirection.ltr,
+        child: Center(
+          child: CupertinoSwitch(
+            value: false,
+            dragStartBehavior: DragStartBehavior.down,
+            onChanged: null,
+          ),
+        )
+      ),
+    );
+
+    expect(find.byType(Opacity), findsOneWidget);
+    expect(tester.widget<Opacity>(find.byType(Opacity).first).opacity, 0.5);
+  });
+
+    testWidgets('Switch turns opaque after becoming enabled', (WidgetTester tester) async {
+    await tester.pumpWidget(
+      const Directionality(
+        textDirection: TextDirection.ltr,
+        child: Center(
+          child: CupertinoSwitch(
+            value: false,
+            dragStartBehavior: DragStartBehavior.down,
+            onChanged: null,
+          ),
+        )
+      ),
+    );
+
+    await tester.pumpWidget(
+      Directionality(
+        textDirection: TextDirection.ltr,
+        child: Center(
+          child: CupertinoSwitch(
+            value: false,
+            dragStartBehavior: DragStartBehavior.down,
+            onChanged: (bool newValue) {},
+          ),
+        )
+      ),
+    );
+
+    expect(find.byType(Opacity), findsOneWidget);
+    expect(tester.widget<Opacity>(find.byType(Opacity).first).opacity, 1.0);
+  });
+
+  testWidgets('Switch renders correctly before, during, and after being tapped', (WidgetTester tester) async {
+    final Key switchKey = UniqueKey();
+    bool value = false;
+    await tester.pumpWidget(
+      Directionality(
+        textDirection: TextDirection.ltr,
+        child: StatefulBuilder(
+          builder: (BuildContext context, StateSetter setState) {
+            return Center(
+              child: RepaintBoundary(
+                child: CupertinoSwitch(
+                  key: switchKey,
+                  value: value,
+                  dragStartBehavior: DragStartBehavior.down,
+                  onChanged: (bool newValue) {
+                    setState(() {
+                      value = newValue;
+                    });
+                  },
+                )
+              )
+            );
+          },
+        ),
+      ),
+    );
+
+    await expectLater(
+      find.byKey(switchKey),
+      matchesGoldenFile(
+        'switch.tap.off.png',
+        version: 0,
+      ),
+    );
+
+    await tester.tap(find.byKey(switchKey));
+    expect(value, isTrue);
+
+    // Kick off animation, then advance to intermediate frame.
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 60));
+    await expectLater(
+      find.byKey(switchKey),
+      matchesGoldenFile(
+        'switch.tap.turningOn.png',
+        version: 0,
+      ),
+    );
+
+    await tester.pumpAndSettle();
+    await expectLater(
+      find.byKey(switchKey),
+      matchesGoldenFile(
+        'switch.tap.on.png',
+        version: 0,
+      ),
+    );
+  });
+
 }

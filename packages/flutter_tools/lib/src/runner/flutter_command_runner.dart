@@ -30,8 +30,8 @@ import '../convert.dart';
 import '../dart/package_map.dart';
 import '../device.dart';
 import '../globals.dart';
+import '../reporting/reporting.dart';
 import '../tester/flutter_tester.dart';
-import '../usage.dart';
 import '../version.dart';
 import '../vmservice.dart';
 
@@ -178,7 +178,7 @@ class FlutterCommandRunner extends CommandRunner<void> {
     return  '${wrapText(description)}\n\n$usageWithoutDescription';
   }
 
-  static String get _defaultFlutterRoot {
+  static String get defaultFlutterRoot {
     if (platform.environment.containsKey(kFlutterRootEnvironmentVariableName))
       return platform.environment[kFlutterRootEnvironmentVariableName];
     try {
@@ -303,15 +303,15 @@ class FlutterCommandRunner extends CommandRunner<void> {
         ..writeln()
         ..writeln('# rest')
         ..writeln(topLevelResults.rest);
-      await manifest.writeAsString(buffer.toString(), flush: true);
+      manifest.writeAsStringSync(buffer.toString(), flush: true);
 
       // ZIP the recording up once the recording has been serialized.
-      addShutdownHook(() async {
+      addShutdownHook(() {
         final File zipFile = getUniqueFile(fs.currentDirectory, 'bugreport', 'zip');
         os.zip(tempDir, zipFile);
         printStatus(userMessages.runnerBugReportFinished(zipFile.basename));
       }, ShutdownStage.POST_PROCESS_RECORDING);
-      addShutdownHook(() => tempDir.delete(recursive: true), ShutdownStage.CLEANUP);
+      addShutdownHook(() => tempDir.deleteSync(recursive: true), ShutdownStage.CLEANUP);
     }
 
     assert(recordTo == null || replayFrom == null);
@@ -323,7 +323,7 @@ class FlutterCommandRunner extends CommandRunner<void> {
       contextOverrides.addAll(<Type, dynamic>{
         ProcessManager: getRecordingProcessManager(recordTo),
         FileSystem: getRecordingFileSystem(recordTo),
-        Platform: await getRecordingPlatform(recordTo),
+        Platform: getRecordingPlatform(recordTo),
       });
       VMService.enableRecordingConnection(recordTo);
     }
@@ -335,14 +335,14 @@ class FlutterCommandRunner extends CommandRunner<void> {
       contextOverrides.addAll(<Type, dynamic>{
         ProcessManager: await getReplayProcessManager(replayFrom),
         FileSystem: getReplayFileSystem(replayFrom),
-        Platform: await getReplayPlatform(replayFrom),
+        Platform: getReplayPlatform(replayFrom),
       });
       VMService.enableReplayConnection(replayFrom);
     }
 
     // We must set Cache.flutterRoot early because other features use it (e.g.
     // enginePath's initializer uses it).
-    final String flutterRoot = topLevelResults['flutter-root'] ?? _defaultFlutterRoot;
+    final String flutterRoot = topLevelResults['flutter-root'] ?? defaultFlutterRoot;
     Cache.flutterRoot = fs.path.normalize(fs.path.absolute(flutterRoot));
 
     // Set up the tooling configuration.
@@ -367,7 +367,13 @@ class FlutterCommandRunner extends CommandRunner<void> {
           flutterUsage.suppressAnalytics = true;
 
         _checkFlutterCopy();
-        await FlutterVersion.instance.ensureVersionFile();
+        try {
+          await FlutterVersion.instance.ensureVersionFile();
+        } on FileSystemException catch (e) {
+          printError('Failed to write the version file to the artifact cache: "$e".');
+          printError('Please ensure you have permissions in the artifact cache directory.');
+          throwToolExit('Failed to write the version file');
+        }
         if (topLevelResults.command?.name != 'upgrade' && topLevelResults['version-check']) {
           await FlutterVersion.instance.checkFlutterVersionFreshness();
         }
@@ -478,7 +484,7 @@ class FlutterCommandRunner extends CommandRunner<void> {
   }
 
   static void initFlutterRoot() {
-    Cache.flutterRoot ??= _defaultFlutterRoot;
+    Cache.flutterRoot ??= defaultFlutterRoot;
   }
 
   /// Get the root directories of the repo - the directories containing Dart packages.
@@ -506,7 +512,10 @@ class FlutterCommandRunner extends CommandRunner<void> {
     final List<String> projectPaths = fs.directory(rootPath)
       .listSync(followLinks: false)
       .expand((FileSystemEntity entity) {
-        return entity is Directory ? _gatherProjectPaths(entity.path) : <String>[];
+        if (entity is Directory && !fs.path.split(entity.path).contains('.dart_tool')) {
+          return _gatherProjectPaths(entity.path);
+        }
+        return <String>[];
       })
       .toList();
 
@@ -540,7 +549,16 @@ class FlutterCommandRunner extends CommandRunner<void> {
     // Check that the flutter running is that same as the one referenced in the pubspec.
     if (fs.isFileSync(kPackagesFileName)) {
       final PackageMap packageMap = PackageMap(kPackagesFileName);
-      final Uri flutterUri = packageMap.map['flutter'];
+      Uri flutterUri;
+      try {
+        flutterUri = packageMap.map['flutter'];
+      } on FormatException {
+        // We're not quite sure why this can happen, perhaps the user
+        // accidentally edited the .packages file. Re-running pub should
+        // fix the issue, and we definitely shouldn't crash here.
+        printTrace('Failed to parse .packages file to check flutter dependency.');
+        return;
+      }
 
       if (flutterUri != null && (flutterUri.scheme == 'file' || flutterUri.scheme == '')) {
         // .../flutter/packages/flutter/lib

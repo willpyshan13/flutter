@@ -16,7 +16,7 @@ import 'will_pop_scope.dart';
 /// with a context whose ancestor is the [Form], or pass a [GlobalKey] to the
 /// [Form] constructor and call [GlobalKey.currentState].
 ///
-/// {@tool snippet --template=stateful_widget_material}
+/// {@tool snippet --template=stateful_widget_scaffold}
 /// This example shows a [Form] with one [TextFormField] and a [RaisedButton]. A
 /// [GlobalKey] is used here to identify the [Form] and validate input.
 ///
@@ -35,6 +35,7 @@ import 'will_pop_scope.dart';
 ///             if (value.isEmpty) {
 ///               return 'Please enter some text';
 ///             }
+///             return null;
 ///           },
 ///         ),
 ///         Padding(
@@ -229,6 +230,9 @@ class _FormScope extends InheritedWidget {
 
 /// Signature for validating a form field.
 ///
+/// Returns an error string to display if the input is invalid, or null
+/// otherwise.
+///
 /// Used by [FormField.validator].
 typedef FormFieldValidator<T> = String Function(T value);
 
@@ -362,10 +366,9 @@ class FormFieldState<T> extends State<FormField<T>> {
     return !hasError;
   }
 
-  bool _validate() {
+  void _validate() {
     if (widget.validator != null)
       _errorText = widget.validator(_value);
-    return !hasError;
   }
 
   /// Updates this field's state to the new value. Useful for responding to

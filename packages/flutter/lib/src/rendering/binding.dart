@@ -87,6 +87,17 @@ mixin RendererBinding on BindingBase, ServicesBinding, SchedulerBinding, Gesture
           return Future<void>.value();
         },
       );
+      registerBoolServiceExtension(
+        name: 'debugCheckElevationsEnabled',
+        getter: () async => debugCheckElevationsEnabled,
+        setter: (bool value) {
+          if (debugCheckElevationsEnabled == value) {
+            return Future<void>.value();
+          }
+          debugCheckElevationsEnabled = value;
+          return _forceRepaint();
+        }
+      );
       registerSignalServiceExtension(
         name: 'debugDumpLayerTree',
         callback: () {
@@ -231,13 +242,7 @@ mixin RendererBinding on BindingBase, ServicesBinding, SchedulerBinding, Gesture
   // Creates a [MouseTracker] which manages state about currently connected
   // mice, for hover notification.
   MouseTracker _createMouseTracker() {
-    return MouseTracker(pointerRouter, (Offset offset) {
-      // Layer hit testing is done using device pixels, so we have to convert
-      // the logical coordinates of the event location back to device pixels
-      // here.
-      return renderView.layer
-          .find<MouseTrackerAnnotation>(offset * window.devicePixelRatio);
-    });
+    return MouseTracker(pointerRouter, renderView.hitTestMouseTrackers);
   }
 
   void _handleSemanticsEnabledChanged() {

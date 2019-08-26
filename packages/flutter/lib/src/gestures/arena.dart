@@ -33,7 +33,7 @@ abstract class GestureArenaMember {
   void rejectGesture(int pointer);
 }
 
-/// An interface to information to an arena.
+/// An interface to pass information to an arena.
 ///
 /// A given [GestureArenaMember] can have multiple entries in multiple arenas
 /// with different pointer ids.
@@ -94,7 +94,7 @@ class _GestureArena {
 
 /// The first member to accept or the last member to not reject wins.
 ///
-/// See <https://flutter.io/gestures/#gesture-disambiguation> for more
+/// See <https://flutter.dev/gestures/#gesture-disambiguation> for more
 /// information about the role this class plays in the gesture system.
 ///
 /// To debug problems with gestures, consider using

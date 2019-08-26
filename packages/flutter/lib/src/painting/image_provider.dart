@@ -11,6 +11,8 @@ import 'dart:ui' show Size, Locale, TextDirection, hashValues;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
+import '_network_image_io.dart'
+  if (dart.library.html) '_network_image_web.dart' as network_image;
 import 'binding.dart';
 import 'image_cache.dart';
 import 'image_stream.dart';
@@ -217,8 +219,9 @@ class ImageConfiguration {
 ///       // If the keys are the same, then we got the same image back, and so we don't
 ///       // need to update the listeners. If the key changed, though, we must make sure
 ///       // to switch our listeners to the new image stream.
-///       oldImageStream?.removeListener(_updateImage);
-///       _imageStream.addListener(_updateImage);
+///       final ImageStreamListener listener = ImageStreamListener(_updateImage);
+///       oldImageStream?.removeListener(listener);
+///       _imageStream.addListener(listener);
 ///     }
 ///   }
 ///
@@ -231,7 +234,7 @@ class ImageConfiguration {
 ///
 ///   @override
 ///   void dispose() {
-///     _imageStream.removeListener(_updateImage);
+///     _imageStream.removeListener(ImageStreamListener(_updateImage));
 ///     super.dispose();
 ///   }
 ///
@@ -262,46 +265,60 @@ abstract class ImageProvider<T> {
     assert(configuration != null);
     final ImageStream stream = ImageStream();
     T obtainedKey;
+    bool didError = false;
     Future<void> handleError(dynamic exception, StackTrace stack) async {
+      if (didError) {
+        return;
+      }
+      didError = true;
       await null; // wait an event turn in case a listener has been added to the image stream.
       final _ErrorImageCompleter imageCompleter = _ErrorImageCompleter();
       stream.setCompleter(imageCompleter);
       imageCompleter.setError(
         exception: exception,
         stack: stack,
-        context: 'while resolving an image',
+        context: ErrorDescription('while resolving an image'),
         silent: true, // could be a network error or whatnot
-        informationCollector: (StringBuffer information) {
-          information.writeln('Image provider: $this');
-          information.writeln('Image configuration: $configuration');
-          if (obtainedKey != null) {
-            information.writeln('Image key: $obtainedKey');
-          }
+        informationCollector: () sync* {
+          yield DiagnosticsProperty<ImageProvider>('Image provider', this);
+          yield DiagnosticsProperty<ImageConfiguration>('Image configuration', configuration);
+          yield DiagnosticsProperty<T>('Image key', obtainedKey, defaultValue: null);
         },
       );
     }
 
-    // `obtainKey` can throw both sync and async errors.
-    // `catchError` handles cases where async errors are thrown and the try block is for sync errors.
-    //
-    // `onError` callback on [ImageCache] handles the cases where `obtainKey` is a sync future and `load` throws.
-    Future<T> key;
-    try {
-      key = obtainKey(configuration);
-    } catch (error, stackTrace) {
-      handleError(error, stackTrace);
-      return stream;
-    }
-
-    key.then<void>((T key) {
-      obtainedKey = key;
-      final ImageStreamCompleter completer = PaintingBinding.instance
-          .imageCache.putIfAbsent(key, () => load(key), onError: handleError);
-      if (completer != null) {
-        stream.setCompleter(completer);
+    // If an error is added to a synchronous completer before a listener has been
+    // added, it can throw an error both into the zone and up the stack. Thus, it
+    // looks like the error has been caught, but it is in fact also bubbling to the
+    // zone. Since we cannot prevent all usage of Completer.sync here, or rather
+    // that changing them would be too breaking, we instead hook into the same
+    // zone mechanism to intercept the uncaught error and deliver it to the
+    // image stream's error handler. Note that these errors may be duplicated,
+    // hence the need for the `didError` flag.
+    final Zone dangerZone = Zone.current.fork(
+      specification: ZoneSpecification(
+        handleUncaughtError: (Zone zone, ZoneDelegate delegate, Zone parent, Object error, StackTrace stackTrace) {
+          handleError(error, stackTrace);
+        }
+      )
+    );
+    dangerZone.runGuarded(() {
+      Future<T> key;
+      try {
+        key = obtainKey(configuration);
+      } catch (error, stackTrace) {
+        handleError(error, stackTrace);
+        return;
       }
-    }).catchError(handleError);
-
+      key.then<void>((T key) {
+        obtainedKey = key;
+        final ImageStreamCompleter completer = PaintingBinding.instance
+            .imageCache.putIfAbsent(key, () => load(key), onError: handleError);
+        if (completer != null) {
+          stream.setCompleter(completer);
+        }
+      }).catchError(handleError);
+    });
     return stream;
   }
 
@@ -358,7 +375,6 @@ abstract class ImageProvider<T> {
   /// arguments and [ImageConfiguration] objects should return keys that are
   /// '==' to each other (possibly by using a class for the key that itself
   /// implements [==]).
-  @protected
   Future<T> obtainKey(ImageConfiguration configuration);
 
   /// Converts a key into an [ImageStreamCompleter], and begins fetching the
@@ -432,9 +448,9 @@ abstract class AssetBundleImageProvider extends ImageProvider<AssetBundleImageKe
     return MultiFrameImageStreamCompleter(
       codec: _loadAsync(key),
       scale: key.scale,
-      informationCollector: (StringBuffer information) {
-        information.writeln('Image provider: $this');
-        information.write('Image key: $key');
+      informationCollector: () sync* {
+        yield DiagnosticsProperty<ImageProvider>('Image provider', this);
+        yield DiagnosticsProperty<AssetBundleImageKey>('Image key', key);
       },
     );
   }
@@ -459,78 +475,28 @@ abstract class AssetBundleImageProvider extends ImageProvider<AssetBundleImageKe
 /// See also:
 ///
 ///  * [Image.network] for a shorthand of an [Image] widget backed by [NetworkImage].
-// TODO(ianh): Find some way to honour cache headers to the extent that when the
+// TODO(ianh): Find some way to honor cache headers to the extent that when the
 // last reference to an image is released, we proactively evict the image from
 // our cache if the headers describe the image as having expired at that point.
-class NetworkImage extends ImageProvider<NetworkImage> {
+abstract class NetworkImage extends ImageProvider<NetworkImage> {
   /// Creates an object that fetches the image at the given URL.
   ///
-  /// The arguments must not be null.
-  const NetworkImage(this.url, { this.scale = 1.0, this.headers })
-    : assert(url != null),
-      assert(scale != null);
+  /// The arguments [url] and [scale] must not be null.
+  const factory NetworkImage(String url, { double scale, Map<String, String> headers }) = network_image.NetworkImage;
 
   /// The URL from which the image will be fetched.
-  final String url;
+  String get url;
 
   /// The scale to place in the [ImageInfo] object of the image.
-  final double scale;
+  double get scale;
 
   /// The HTTP headers that will be used with [HttpClient.get] to fetch image from network.
-  final Map<String, String> headers;
+  ///
+  /// When running flutter on the web, headers are not used.
+  Map<String, String> get headers;
 
   @override
-  Future<NetworkImage> obtainKey(ImageConfiguration configuration) {
-    return SynchronousFuture<NetworkImage>(this);
-  }
-
-  @override
-  ImageStreamCompleter load(NetworkImage key) {
-    return MultiFrameImageStreamCompleter(
-      codec: _loadAsync(key),
-      scale: key.scale,
-      informationCollector: (StringBuffer information) {
-        information.writeln('Image provider: $this');
-        information.write('Image key: $key');
-      },
-    );
-  }
-
-  static final HttpClient _httpClient = HttpClient();
-
-  Future<ui.Codec> _loadAsync(NetworkImage key) async {
-    assert(key == this);
-
-    final Uri resolved = Uri.base.resolve(key.url);
-    final HttpClientRequest request = await _httpClient.getUrl(resolved);
-    headers?.forEach((String name, String value) {
-      request.headers.add(name, value);
-    });
-    final HttpClientResponse response = await request.close();
-    if (response.statusCode != HttpStatus.ok)
-      throw Exception('HTTP request failed, statusCode: ${response?.statusCode}, $resolved');
-
-    final Uint8List bytes = await consolidateHttpClientResponseBytes(response);
-    if (bytes.lengthInBytes == 0)
-      throw Exception('NetworkImage is an empty file: $resolved');
-
-    return PaintingBinding.instance.instantiateImageCodec(bytes);
-  }
-
-  @override
-  bool operator ==(dynamic other) {
-    if (other.runtimeType != runtimeType)
-      return false;
-    final NetworkImage typedOther = other;
-    return url == typedOther.url
-        && scale == typedOther.scale;
-  }
-
-  @override
-  int get hashCode => hashValues(url, scale);
-
-  @override
-  String toString() => '$runtimeType("$url", scale: $scale)';
+  ImageStreamCompleter load(NetworkImage key);
 }
 
 /// Decodes the given [File] object as an image, associating it with the given
@@ -563,8 +529,8 @@ class FileImage extends ImageProvider<FileImage> {
     return MultiFrameImageStreamCompleter(
       codec: _loadAsync(key),
       scale: key.scale,
-      informationCollector: (StringBuffer information) {
-        information.writeln('Path: ${file?.path}');
+      informationCollector: () sync* {
+        yield ErrorDescription('Path: ${file?.path}');
       },
     );
   }
@@ -799,7 +765,7 @@ class _ErrorImageCompleter extends ImageStreamCompleter {
   _ErrorImageCompleter();
 
   void setError({
-    String context,
+    DiagnosticsNode context,
     dynamic exception,
     StackTrace stack,
     InformationCollector informationCollector,
@@ -813,4 +779,26 @@ class _ErrorImageCompleter extends ImageStreamCompleter {
       silent: silent,
     );
   }
+}
+
+/// The exception thrown when the HTTP request to load a network image fails.
+class NetworkImageLoadException implements Exception {
+  /// Creates a [NetworkImageLoadException] with the specified http status
+  /// [code] and the [uri]
+  NetworkImageLoadException({@required this.statusCode, @required this.uri})
+      : assert(uri != null),
+        assert(statusCode != null),
+        _message = 'HTTP request failed, statusCode: $statusCode, $uri';
+
+  /// The HTTP status code from the server.
+  final int statusCode;
+
+  /// A human-readable error message.
+  final String _message;
+
+  /// Resolved URI of the requested image.
+  final Uri uri;
+
+  @override
+  String toString() => _message;
 }

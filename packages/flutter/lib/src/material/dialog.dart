@@ -8,7 +8,6 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 
 import 'button_bar.dart';
-import 'button_theme.dart';
 import 'colors.dart';
 import 'debug.dart';
 import 'dialog_theme.dart';
@@ -189,6 +188,7 @@ class Dialog extends StatelessWidget {
 ///
 ///  * [SimpleDialog], which handles the scrolling of the contents but has no [actions].
 ///  * [Dialog], on which [AlertDialog] and [SimpleDialog] are based.
+///  * [CupertinoAlertDialog], an iOS-styled alert dialog.
 ///  * [showDialog], which actually displays the dialog and returns its result.
 ///  * <https://material.io/design/components/dialogs.html#alert-dialog>
 class AlertDialog extends StatelessWidget {
@@ -319,7 +319,7 @@ class AlertDialog extends StatelessWidget {
         ),
       ));
     } else {
-      switch (defaultTargetPlatform) {
+      switch (theme.platform) {
         case TargetPlatform.iOS:
           label = semanticLabel;
           break;
@@ -342,10 +342,8 @@ class AlertDialog extends StatelessWidget {
     }
 
     if (actions != null) {
-      children.add(ButtonTheme.bar(
-        child: ButtonBar(
-          children: actions,
-        ),
+      children.add(ButtonBar(
+        children: actions,
       ));
     }
 
@@ -589,16 +587,18 @@ class SimpleDialog extends StatelessWidget {
     final List<Widget> body = <Widget>[];
     String label = semanticLabel;
 
+    final ThemeData theme = Theme.of(context);
+
     if (title != null) {
       body.add(Padding(
         padding: titlePadding,
         child: DefaultTextStyle(
-          style: Theme.of(context).textTheme.title,
+          style: theme.textTheme.title,
           child: Semantics(namesRoute: true, child: title),
         ),
       ));
     } else {
-      switch (defaultTargetPlatform) {
+      switch (theme.platform) {
         case TargetPlatform.iOS:
           label = semanticLabel;
           break;
@@ -699,11 +699,12 @@ Future<T> showDialog<T>({
 }) {
   assert(child == null || builder == null);
   assert(debugCheckHasMaterialLocalizations(context));
+
+  final ThemeData theme = Theme.of(context, shadowThemeOnly: true);
   return showGeneralDialog(
     context: context,
     pageBuilder: (BuildContext buildContext, Animation<double> animation, Animation<double> secondaryAnimation) {
-      final ThemeData theme = Theme.of(context, shadowThemeOnly: true);
-      final Widget pageChild =  child ?? Builder(builder: builder);
+      final Widget pageChild = child ?? Builder(builder: builder);
       return SafeArea(
         child: Builder(
           builder: (BuildContext context) {

@@ -15,7 +15,7 @@ import 'utils.dart';
 typedef StringConverter = String Function(String string);
 
 /// A function that will be run before the VM exits.
-typedef ShutdownHook = Future<dynamic> Function();
+typedef ShutdownHook = FutureOr<dynamic> Function();
 
 // TODO(ianh): We have way too many ways to run subprocesses in this project.
 // Convert most of these into one or more lightweight wrappers around the
@@ -83,8 +83,12 @@ Future<void> runShutdownHooks() async {
       printTrace('Shutdown hook priority ${stage.priority}');
       final List<ShutdownHook> hooks = _shutdownHooks.remove(stage);
       final List<Future<dynamic>> futures = <Future<dynamic>>[];
-      for (ShutdownHook shutdownHook in hooks)
-        futures.add(shutdownHook());
+      for (ShutdownHook shutdownHook in hooks) {
+        final FutureOr<dynamic> result = shutdownHook();
+        if (result is Future<dynamic>) {
+          futures.add(result);
+        }
+      }
       await Future.wait<dynamic>(futures);
     }
   } finally {
@@ -148,7 +152,7 @@ Future<int> runCommandAndStreamOutput(
   final StreamSubscription<String> stdoutSubscription = process.stdout
     .transform<String>(utf8.decoder)
     .transform<String>(const LineSplitter())
-    .where((String line) => filter == null ? true : filter.hasMatch(line))
+    .where((String line) => filter == null || filter.hasMatch(line))
     .listen((String line) {
       if (mapFunction != null)
         line = mapFunction(line);
@@ -163,7 +167,7 @@ Future<int> runCommandAndStreamOutput(
   final StreamSubscription<String> stderrSubscription = process.stderr
     .transform<String>(utf8.decoder)
     .transform<String>(const LineSplitter())
-    .where((String line) => filter == null ? true : filter.hasMatch(line))
+    .where((String line) => filter == null || filter.hasMatch(line))
     .listen((String line) {
       if (mapFunction != null)
         line = mapFunction(line);
@@ -239,11 +243,14 @@ Future<RunResult> runAsync(
   return runResults;
 }
 
+typedef RunResultChecker = bool Function(int);
+
 Future<RunResult> runCheckedAsync(
   List<String> cmd, {
   String workingDirectory,
   bool allowReentrantFlutter = false,
   Map<String, String> environment,
+  RunResultChecker whiteListFailures,
 }) async {
   final RunResult result = await runAsync(
     cmd,
@@ -252,26 +259,36 @@ Future<RunResult> runCheckedAsync(
     environment: environment,
   );
   if (result.exitCode != 0) {
-    throw ProcessException(cmd[0], cmd.sublist(1),
-      'Process "${cmd[0]}" exited abnormally:\n$result', result.exitCode);
+    if (whiteListFailures == null || !whiteListFailures(result.exitCode)) {
+      throw ProcessException(cmd[0], cmd.sublist(1),
+          'Process "${cmd[0]}" exited abnormally:\n$result', result.exitCode);
+    }
   }
   return result;
 }
 
-bool exitsHappy(List<String> cli) {
+bool exitsHappy(
+  List<String> cli, {
+  Map<String, String> environment,
+}) {
   _traceCommand(cli);
   try {
-    return processManager.runSync(cli).exitCode == 0;
+    return processManager.runSync(cli, environment: environment).exitCode == 0;
   } catch (error) {
+    printTrace('$cli failed with $error');
     return false;
   }
 }
 
-Future<bool> exitsHappyAsync(List<String> cli) async {
+Future<bool> exitsHappyAsync(
+  List<String> cli, {
+  Map<String, String> environment,
+}) async {
   _traceCommand(cli);
   try {
-    return (await processManager.run(cli)).exitCode == 0;
+    return (await processManager.run(cli, environment: environment)).exitCode == 0;
   } catch (error) {
+    printTrace('$cli failed with $error');
     return false;
   }
 }
@@ -285,6 +302,7 @@ String runCheckedSync(
   bool allowReentrantFlutter = false,
   bool hideStdout = false,
   Map<String, String> environment,
+  RunResultChecker whiteListFailures,
 }) {
   return _runWithLoggingSync(
     cmd,
@@ -294,6 +312,7 @@ String runCheckedSync(
     checked: true,
     noisyErrors: true,
     environment: environment,
+    whiteListFailures: whiteListFailures
   );
 }
 
@@ -328,6 +347,7 @@ String _runWithLoggingSync(
   bool allowReentrantFlutter = false,
   bool hideStdout = false,
   Map<String, String> environment,
+  RunResultChecker whiteListFailures,
 }) {
   _traceCommand(cmd, workingDirectory: workingDirectory);
   final ProcessResult results = processManager.runSync(
@@ -338,14 +358,19 @@ String _runWithLoggingSync(
 
   printTrace('Exit code ${results.exitCode} from: ${cmd.join(' ')}');
 
+  bool failedExitCode = results.exitCode != 0;
+  if (whiteListFailures != null && failedExitCode) {
+    failedExitCode = !whiteListFailures(results.exitCode);
+  }
+
   if (results.stdout.isNotEmpty && !hideStdout) {
-    if (results.exitCode != 0 && noisyErrors)
+    if (failedExitCode && noisyErrors)
       printStatus(results.stdout.trim());
     else
       printTrace(results.stdout.trim());
   }
 
-  if (results.exitCode != 0) {
+  if (failedExitCode) {
     if (results.stderr.isNotEmpty) {
       if (noisyErrors)
         printError(results.stderr.trim());

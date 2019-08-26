@@ -11,6 +11,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 
 import 'button.dart';
+import 'constants.dart';
 import 'icons.dart';
 import 'page_scaffold.dart';
 import 'route.dart';
@@ -19,7 +20,7 @@ import 'theme.dart';
 /// Standard iOS navigation bar height without the status bar.
 ///
 /// This height is constant and independent of accessibility as it is in iOS.
-const double _kNavBarPersistentHeight = 44.0;
+const double _kNavBarPersistentHeight = kMinInteractiveDimensionCupertino;
 
 /// Size increase from expanding the navigation bar into an iOS-11-style large title
 /// form in a [CustomScrollView].
@@ -177,6 +178,14 @@ bool _isTransitionable(BuildContext context) {
 /// should be present in each [PageRoute] to support the default transitions.
 /// Use [transitionBetweenRoutes] or [heroTag] to customize the transition
 /// behavior for multiple navigation bars per route.
+///
+/// When used in a [CupertinoPageScaffold], [CupertinoPageScaffold.navigationBar]
+/// has its text scale factor set to 1.0 and does not respond to text scale factor
+/// changes from the operating system, to match the native iOS behavior. To override
+/// this behavior, wrap each of the `navigationBar`'s components inside a [MediaQuery]
+/// with the desired [MediaQueryData.textScaleFactor] value. The text scale factor
+/// value from the operating system can be retrieved in many ways, such as querying
+/// [MediaQuery.textScaleFactorOf] against [CupertinoApp]'s [BuildContext].
 ///
 /// See also:
 ///
@@ -498,6 +507,14 @@ class _CupertinoNavigationBarState extends State<CupertinoNavigationBar> {
 /// Use [transitionBetweenRoutes] or [heroTag] to customize the transition
 /// behavior for multiple navigation bars per route.
 ///
+/// `CupertinoSliverNavigationBar` has its text scale factor set to 1.0 by default
+/// and does not respond to text scale factor changes from the operating system,
+/// to match the native iOS behavior. To override this behavior, wrap each of the
+/// `CupertinoSliverNavigationBar`'s components inside a [MediaQuery] with the
+/// desired [MediaQueryData.textScaleFactor] value. The text scale factor value
+/// from the operating system can be retrieved in many ways, such as querying
+/// [MediaQuery.textScaleFactorOf] against [CupertinoApp]'s [BuildContext].
+///
 /// See also:
 ///
 ///  * [CupertinoNavigationBar], an iOS navigation bar for use on non-scrolling
@@ -651,20 +668,23 @@ class _CupertinoSliverNavigationBarState extends State<CupertinoSliverNavigation
       // Lint ignore to maintain backward compatibility.
       widget.actionsForegroundColor, // ignore: deprecated_member_use_from_same_package
       context,
-      SliverPersistentHeader(
-        pinned: true, // iOS navigation bars are always pinned.
-        delegate: _LargeTitleNavigationBarSliverDelegate(
-          keys: keys,
-          components: components,
-          userMiddle: widget.middle,
-          backgroundColor: widget.backgroundColor ?? CupertinoTheme.of(context).barBackgroundColor,
-          border: widget.border,
-          padding: widget.padding,
-          actionsForegroundColor: actionsForegroundColor,
-          transitionBetweenRoutes: widget.transitionBetweenRoutes,
-          heroTag: widget.heroTag,
-          persistentHeight: _kNavBarPersistentHeight + MediaQuery.of(context).padding.top,
-          alwaysShowMiddle: widget.middle != null,
+      MediaQuery(
+        data: MediaQuery.of(context).copyWith(textScaleFactor: 1),
+        child: SliverPersistentHeader(
+          pinned: true, // iOS navigation bars are always pinned.
+          delegate: _LargeTitleNavigationBarSliverDelegate(
+            keys: keys,
+            components: components,
+            userMiddle: widget.middle,
+            backgroundColor: widget.backgroundColor ?? CupertinoTheme.of(context).barBackgroundColor,
+            border: widget.border,
+            padding: widget.padding,
+            actionsForegroundColor: actionsForegroundColor,
+            transitionBetweenRoutes: widget.transitionBetweenRoutes,
+            heroTag: widget.heroTag,
+            persistentHeight: _kNavBarPersistentHeight + MediaQuery.of(context).padding.top,
+            alwaysShowMiddle: widget.middle != null,
+          ),
         ),
       ),
     );
@@ -1189,6 +1209,10 @@ class _NavigationBarStaticComponents {
 /// [CupertinoSliverNavigationBar]'s `leading` slot when
 /// `automaticallyImplyLeading` is true.
 ///
+/// When manually inserted, the [CupertinoNavigationBarBackButton] should only
+/// be used in routes that can be popped unless a custom [onPressed] is
+/// provided.
+///
 /// Shows a back chevron and the previous route's title when available from
 /// the previous [CupertinoPageRoute.title]. If [previousPageTitle] is specified,
 /// it will be shown instead.
@@ -1200,6 +1224,7 @@ class CupertinoNavigationBarBackButton extends StatelessWidget {
   const CupertinoNavigationBarBackButton({
     this.color,
     this.previousPageTitle,
+    this.onPressed,
   }) : _backChevron = null,
        _backLabel = null;
 
@@ -1209,7 +1234,8 @@ class CupertinoNavigationBarBackButton extends StatelessWidget {
     this._backChevron,
     this._backLabel,
   ) : previousPageTitle = null,
-      color = null;
+      color = null,
+      onPressed = null;
 
   /// The [Color] of the back button.
   ///
@@ -1223,6 +1249,15 @@ class CupertinoNavigationBarBackButton extends StatelessWidget {
   /// previous routes are both [CupertinoPageRoute]s.
   final String previousPageTitle;
 
+  /// An override callback to perform instead of the default behavior which is
+  /// to pop the [Navigator].
+  ///
+  /// It can, for instance, be used to pop the platform's navigation stack
+  /// instead of Flutter's [Navigator].
+  ///
+  /// Defaults to null.
+  final VoidCallback onPressed;
+
   final Widget _backChevron;
 
   final Widget _backLabel;
@@ -1230,10 +1265,12 @@ class CupertinoNavigationBarBackButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final ModalRoute<dynamic> currentRoute = ModalRoute.of(context);
-    assert(
-      currentRoute.canPop,
-      'CupertinoNavigationBarBackButton should only be used in routes that can be popped',
-    );
+    if (onPressed == null) {
+      assert(
+        currentRoute?.canPop == true,
+        'CupertinoNavigationBarBackButton should only be used in routes that can be popped',
+      );
+    }
 
     TextStyle actionTextStyle = CupertinoTheme.of(context).textTheme.navActionTextStyle;
     if (color != null) {
@@ -1269,7 +1306,13 @@ class CupertinoNavigationBarBackButton extends StatelessWidget {
         ),
       ),
       padding: EdgeInsets.zero,
-      onPressed: () { Navigator.maybePop(context); },
+      onPressed: () {
+        if (onPressed != null) {
+          onPressed();
+        } else {
+          Navigator.maybePop(context);
+        }
+      },
     );
   }
 }
@@ -1321,8 +1364,7 @@ class _BackLabel extends StatelessWidget {
     Key key,
     @required this.specifiedPreviousTitle,
     @required this.route,
-  }) : assert(route != null),
-       super(key: key);
+  }) : super(key: key);
 
   final String specifiedPreviousTitle;
   final ModalRoute<dynamic> route;
@@ -1355,7 +1397,7 @@ class _BackLabel extends StatelessWidget {
   Widget build(BuildContext context) {
     if (specifiedPreviousTitle != null) {
       return _buildPreviousTitleWidget(context, specifiedPreviousTitle, null);
-    } else if (route is CupertinoPageRoute<dynamic>) {
+    } else if (route is CupertinoPageRoute<dynamic> && !route.isFirst) {
       final CupertinoPageRoute<dynamic> cupertinoRoute = route;
       // There is no timing issue because the previousTitle Listenable changes
       // happen during route modifications before the ValueListenableBuilder
@@ -2152,8 +2194,9 @@ CreateRectTween _linearTranslateWithLargestRectSizeTween = (Rect begin, Rect end
   );
 };
 
-final TransitionBuilder _navBarHeroLaunchPadBuilder = (
+final HeroPlaceholderBuilder _navBarHeroLaunchPadBuilder = (
   BuildContext context,
+  Size heroSize,
   Widget child,
 ) {
   assert(child is _TransitionableNavigationBar);
@@ -2228,4 +2271,5 @@ final HeroFlightShuttleBuilder _navBarHeroFlightShuttleBuilder = (
         topNavBar: fromNavBar,
       );
   }
+  return null;
 };

@@ -123,6 +123,14 @@ List<GalleryDemo> _buildGalleryDemos() {
       routeName: AnimationDemo.routeName,
       buildRoute: (BuildContext context) => const AnimationDemo(),
     ),
+    GalleryDemo(
+      title: '2D Transformations',
+      subtitle: 'Pan, Zoom, Rotate',
+      icon: GalleryIcons.grid_on,
+      category: _kDemos,
+      routeName: TransformationsDemo.routeName,
+      buildRoute: (BuildContext context) => const TransformationsDemo(),
+    ),
 
     // Style
     GalleryDemo(
@@ -150,6 +158,15 @@ List<GalleryDemo> _buildGalleryDemos() {
       category: _kMaterialComponents,
       routeName: BackdropDemo.routeName,
       buildRoute: (BuildContext context) => BackdropDemo(),
+    ),
+    GalleryDemo(
+      title: 'Banner',
+      subtitle: 'Displaying a banner within a list',
+      icon: GalleryIcons.lists_leave_behind,
+      category: _kMaterialComponents,
+      routeName: BannerDemo.routeName,
+      documentationUrl: 'https://api.flutter.dev/flutter/material/MaterialBanner-class.html',
+      buildRoute: (BuildContext context) => const BannerDemo(),
     ),
     GalleryDemo(
       title: 'Bottom app bar',

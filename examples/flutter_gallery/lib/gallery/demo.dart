@@ -2,6 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+import 'dart:async';
+
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -44,11 +46,15 @@ class TabbedComponentDemoScaffold extends StatelessWidget {
     this.title,
     this.demos,
     this.actions,
+    this.isScrollable = true,
+    this.showExampleCodeAction = true,
   });
 
   final List<ComponentDemoTabData> demos;
   final String title;
   final List<Widget> actions;
+  final bool isScrollable;
+  final bool showExampleCodeAction;
 
   void _showExampleCode(BuildContext context) {
     final String tag = demos[DefaultTabController.of(context).index].exampleCodeTag;
@@ -59,10 +65,28 @@ class TabbedComponentDemoScaffold extends StatelessWidget {
     }
   }
 
-  void _showApiDocumentation(BuildContext context) {
+  Future<void> _showApiDocumentation(BuildContext context) async {
     final String url = demos[DefaultTabController.of(context).index].documentationUrl;
-    if (url != null) {
-      launch(url, forceWebView: true);
+    if (url == null)
+      return;
+
+    if (await canLaunch(url)) {
+      await launch(url);
+    } else {
+      showDialog<void>(
+        context: context,
+        builder: (BuildContext context) {
+          return SimpleDialog(
+            title: const Text('Couldn\'t display URL:'),
+            children: <Widget>[
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                child: Text(url),
+              ),
+            ],
+          );
+        },
+      );
     }
   }
 
@@ -73,16 +97,17 @@ class TabbedComponentDemoScaffold extends StatelessWidget {
       child: Scaffold(
         appBar: AppBar(
           title: Text(title),
-          actions: (actions ?? <Widget>[])..addAll(
-            <Widget>[
-              Builder(
-                builder: (BuildContext context) {
-                  return IconButton(
-                    icon: const Icon(Icons.library_books, semanticLabel: 'Show documentation'),
-                    onPressed: () => _showApiDocumentation(context),
-                  );
-                },
-              ),
+          actions: <Widget>[
+            ...?actions,
+            Builder(
+              builder: (BuildContext context) {
+                return IconButton(
+                  icon: const Icon(Icons.library_books, semanticLabel: 'Show documentation'),
+                  onPressed: () => _showApiDocumentation(context),
+                );
+              },
+            ),
+            if (showExampleCodeAction)
               Builder(
                 builder: (BuildContext context) {
                   return IconButton(
@@ -92,10 +117,9 @@ class TabbedComponentDemoScaffold extends StatelessWidget {
                   );
                 },
               ),
-            ],
-          ),
+          ],
           bottom: TabBar(
-            isScrollable: true,
+            isScrollable: isScrollable,
             tabs: demos.map<Widget>((ComponentDemoTabData data) => Tab(text: data.tabName)).toList(),
           ),
         ),

@@ -167,7 +167,7 @@ void main() {
     await tester.pump(const Duration(milliseconds: 10));
     expect(tester.hasRunningAnimations, isFalse);
 
-    await tester.pumpAndSettle();
+    expect(await tester.pumpAndSettle(), 1);
     transformWidget = tester.firstWidget(find.byType(Transform));
 
     // Icon has not rotated.
@@ -214,6 +214,37 @@ void main() {
     // Icon has rotated 180 degrees back to the original position.
     expect(transformWidget.transform.getRotation()[0], 1.0);
     expect(transformWidget.transform.getRotation()[4], 1.0);
+  });
+
+  testWidgets('UserAccountsDrawerHeader icon color changes', (WidgetTester tester) async {
+    await tester.pumpWidget(MaterialApp(
+      home: Material(
+        child: UserAccountsDrawerHeader(
+          onDetailsPressed: () {},
+          accountName: const Text('name'),
+          accountEmail: const Text('email'),
+        ),
+      ),
+    ));
+
+    Icon iconWidget = tester.firstWidget(find.byType(Icon));
+    // Default icon color is white.
+    expect(iconWidget.color, Colors.white);
+
+    const Color arrowColor = Colors.red;
+    await tester.pumpWidget(MaterialApp(
+      home: Material(
+        child: UserAccountsDrawerHeader(
+          onDetailsPressed: () { },
+          accountName: const Text('name'),
+          accountEmail: const Text('email'),
+          arrowColor: arrowColor,
+        ),
+      ),
+    ));
+
+    iconWidget = tester.firstWidget(find.byType(Icon));
+    expect(iconWidget.color, arrowColor);
   });
 
   testWidgets('UserAccountsDrawerHeader null parameters LTR', (WidgetTester tester) async {
