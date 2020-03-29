@@ -1,7 +1,8 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Flutter Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/widgets.dart';
 
@@ -43,7 +44,7 @@ class _HoverDemoState extends State<HoverDemo> {
     final TextTheme textTheme = Theme.of(context).textTheme;
 
     return DefaultTextStyle(
-      style: textTheme.display1,
+      style: textTheme.headline4,
       child: Scaffold(
         appBar: AppBar(
           title: const Text('Hover Demo'),
@@ -82,8 +83,8 @@ class _HoverDemoState extends State<HoverDemo> {
                     decoration: InputDecoration(labelText: 'Enter Text', filled: true),
                   ),
                 ),
-                Padding(
-                  padding: const EdgeInsets.all(8.0),
+                const Padding(
+                  padding: EdgeInsets.all(8.0),
                   child: TextField(
                     autofocus: false,
                     decoration: InputDecoration(

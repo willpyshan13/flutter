@@ -1,24 +1,26 @@
-// Copyright 2016 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Flutter Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 import 'dart:async';
 
 import 'package:meta/meta.dart';
+import 'package:platform/platform.dart';
+import 'package:process/process.dart';
 
 import '../artifacts.dart';
-import '../base/context.dart';
+import '../base/common.dart';
 import '../base/file_system.dart';
 import '../base/io.dart';
 import '../base/logger.dart';
-import '../base/os.dart';
-import '../base/platform.dart';
 import '../base/process.dart';
-import '../base/process_manager.dart';
+import '../base/terminal.dart';
 import '../base/utils.dart';
 import '../build_info.dart';
 import '../cache.dart';
-import '../globals.dart';
+import '../convert.dart';
+import '../flutter_manifest.dart';
+import '../globals.dart' as globals;
 import '../project.dart';
 import '../reporting/reporting.dart';
 
@@ -26,12 +28,12 @@ final RegExp _settingExpr = RegExp(r'(\w+)\s*=\s*(.*)$');
 final RegExp _varExpr = RegExp(r'\$\(([^)]*)\)');
 
 String flutterFrameworkDir(BuildMode mode) {
-  return fs.path.normalize(fs.path.dirname(artifacts.getArtifactPath(
+  return globals.fs.path.normalize(globals.fs.path.dirname(globals.artifacts.getArtifactPath(
       Artifact.flutterFramework, platform: TargetPlatform.ios, mode: mode)));
 }
 
 String flutterMacOSFrameworkDir(BuildMode mode) {
-  return fs.path.normalize(fs.path.dirname(artifacts.getArtifactPath(
+  return globals.fs.path.normalize(globals.fs.path.dirname(globals.artifacts.getArtifactPath(
       Artifact.flutterMacOSFramework, platform: TargetPlatform.darwin_x64, mode: mode)));
 }
 
@@ -58,7 +60,7 @@ Future<void> updateGeneratedXcodeProperties({
     targetOverride: targetOverride,
     useMacOSConfig: useMacOSConfig,
     setSymroot: setSymroot,
-    buildDirOverride: buildDirOverride
+    buildDirOverride: buildDirOverride,
   );
 
   _updateGeneratedXcodePropertiesFile(
@@ -106,7 +108,7 @@ void _updateGeneratedEnvironmentVariablesScript({
 
   localsBuffer.writeln('#!/bin/sh');
   localsBuffer.writeln('# This is a generated file; do not edit or check into version control.');
-  for (String line in xcodeBuildSettings) {
+  for (final String line in xcodeBuildSettings) {
     localsBuffer.writeln('export "$line"');
   }
 
@@ -115,7 +117,32 @@ void _updateGeneratedEnvironmentVariablesScript({
     : project.ios.generatedEnvironmentVariableExportScript;
   generatedModuleBuildPhaseScript.createSync(recursive: true);
   generatedModuleBuildPhaseScript.writeAsStringSync(localsBuffer.toString());
-  os.chmod(generatedModuleBuildPhaseScript, '755');
+  globals.os.chmod(generatedModuleBuildPhaseScript, '755');
+}
+
+/// Build name parsed and validated from build info and manifest. Used for CFBundleShortVersionString.
+String parsedBuildName({
+  @required FlutterManifest manifest,
+  @required BuildInfo buildInfo,
+}) {
+  final String buildNameToParse = buildInfo?.buildName ?? manifest.buildName;
+  return validatedBuildNameForPlatform(TargetPlatform.ios, buildNameToParse);
+}
+
+/// Build number parsed and validated from build info and manifest. Used for CFBundleVersion.
+String parsedBuildNumber({
+  @required FlutterManifest manifest,
+  @required BuildInfo buildInfo,
+}) {
+  String buildNumberToParse = buildInfo?.buildNumber ?? manifest.buildNumber;
+  final String buildNumber = validatedBuildNumberForPlatform(TargetPlatform.ios, buildNumberToParse);
+  if (buildNumber != null && buildNumber.isNotEmpty) {
+    return buildNumber;
+  }
+  // Drop back to parsing build name if build number is not present. Build number is optional in the manifest, but
+  // FLUTTER_BUILD_NUMBER is required as the backing value for the required CFBundleVersion.
+  buildNumberToParse = buildInfo?.buildName ?? manifest.buildName;
+  return validatedBuildNumberForPlatform(TargetPlatform.ios, buildNumberToParse);
 }
 
 /// List of lines of build settings. Example: 'FLUTTER_BUILD_DIR=build'
@@ -129,21 +156,37 @@ List<String> _xcodeBuildSettingsLines({
 }) {
   final List<String> xcodeBuildSettings = <String>[];
 
-  final String flutterRoot = fs.path.normalize(Cache.flutterRoot);
+  final String flutterRoot = globals.fs.path.normalize(Cache.flutterRoot);
   xcodeBuildSettings.add('FLUTTER_ROOT=$flutterRoot');
 
   // This holds because requiresProjectRoot is true for this command
-  xcodeBuildSettings.add('FLUTTER_APPLICATION_PATH=${fs.path.normalize(project.directory.path)}');
+  xcodeBuildSettings.add('FLUTTER_APPLICATION_PATH=${globals.fs.path.normalize(project.directory.path)}');
 
   // Relative to FLUTTER_APPLICATION_PATH, which is [Directory.current].
-  if (targetOverride != null)
+  if (targetOverride != null) {
     xcodeBuildSettings.add('FLUTTER_TARGET=$targetOverride');
+  }
+
+  // This is an optional path to split debug info
+  if (buildInfo.splitDebugInfoPath != null) {
+    xcodeBuildSettings.add('SPLIT_DEBUG_INFO=${buildInfo.splitDebugInfoPath}');
+  }
+
+  // This is an optional path to obfuscate and output a mapping.
+  if (buildInfo.dartObfuscation) {
+    xcodeBuildSettings.add('DART_OBFUSCATION=true');
+  }
 
   // The build outputs directory, relative to FLUTTER_APPLICATION_PATH.
   xcodeBuildSettings.add('FLUTTER_BUILD_DIR=${buildDirOverride ?? getBuildDirectory()}');
 
   if (setSymroot) {
     xcodeBuildSettings.add('SYMROOT=\${SOURCE_ROOT}/../${getIosBuildDirectory()}');
+  }
+
+  // iOS does not link on Flutter in any build phase. Add the linker flag.
+  if (!useMacOSConfig) {
+    xcodeBuildSettings.add('OTHER_LDFLAGS=\$(inherited) -framework Flutter');
   }
 
   if (!project.isModule) {
@@ -157,26 +200,18 @@ List<String> _xcodeBuildSettingsLines({
     xcodeBuildSettings.add('FLUTTER_FRAMEWORK_DIR=$frameworkDir');
   }
 
-  final String buildNameToParse = buildInfo?.buildName ?? project.manifest.buildName;
-  final String buildName = validatedBuildNameForPlatform(TargetPlatform.ios, buildNameToParse);
-  if (buildName != null) {
-    xcodeBuildSettings.add('FLUTTER_BUILD_NAME=$buildName');
-  }
 
-  String buildNumber = validatedBuildNumberForPlatform(TargetPlatform.ios, buildInfo?.buildNumber ?? project.manifest.buildNumber);
-  // Drop back to parsing build name if build number is not present. Build number is optional in the manifest, but
-  // FLUTTER_BUILD_NUMBER is required as the backing value for the required CFBundleVersion.
-  buildNumber ??= validatedBuildNumberForPlatform(TargetPlatform.ios, buildNameToParse);
+  final String buildName = parsedBuildName(manifest: project.manifest, buildInfo: buildInfo) ?? '1.0.0';
+  xcodeBuildSettings.add('FLUTTER_BUILD_NAME=$buildName');
 
-  if (buildNumber != null) {
-    xcodeBuildSettings.add('FLUTTER_BUILD_NUMBER=$buildNumber');
-  }
+  final String buildNumber = parsedBuildNumber(manifest: project.manifest, buildInfo: buildInfo) ?? '1';
+  xcodeBuildSettings.add('FLUTTER_BUILD_NUMBER=$buildNumber');
 
-  if (artifacts is LocalEngineArtifacts) {
-    final LocalEngineArtifacts localEngineArtifacts = artifacts;
+  if (globals.artifacts is LocalEngineArtifacts) {
+    final LocalEngineArtifacts localEngineArtifacts = globals.artifacts as LocalEngineArtifacts;
     final String engineOutPath = localEngineArtifacts.engineOutPath;
-    xcodeBuildSettings.add('FLUTTER_ENGINE=${fs.path.dirname(fs.path.dirname(engineOutPath))}');
-    xcodeBuildSettings.add('LOCAL_ENGINE=${fs.path.basename(engineOutPath)}');
+    xcodeBuildSettings.add('FLUTTER_ENGINE=${globals.fs.path.dirname(globals.fs.path.dirname(engineOutPath))}');
+    xcodeBuildSettings.add('LOCAL_ENGINE=${globals.fs.path.basename(engineOutPath)}');
 
     // Tell Xcode not to build universal binaries for local engines, which are
     // single-architecture.
@@ -196,29 +231,60 @@ List<String> _xcodeBuildSettingsLines({
     xcodeBuildSettings.add('TRACK_WIDGET_CREATION=true');
   }
 
+  if (buildInfo.treeShakeIcons) {
+    xcodeBuildSettings.add('TREE_SHAKE_ICONS=true');
+  }
+
+  if (buildInfo.dartDefines?.isNotEmpty ?? false) {
+    xcodeBuildSettings.add('DART_DEFINES=${jsonEncode(buildInfo.dartDefines)}');
+  }
+
+  if (buildInfo.extraFrontEndOptions?.isNotEmpty ?? false) {
+    xcodeBuildSettings.add('EXTRA_FRONT_END_OPTIONS=${buildInfo.extraFrontEndOptions.join(',')}');
+  }
+
   return xcodeBuildSettings;
 }
 
-XcodeProjectInterpreter get xcodeProjectInterpreter => context.get<XcodeProjectInterpreter>();
-
 /// Interpreter of Xcode projects.
 class XcodeProjectInterpreter {
+  XcodeProjectInterpreter({
+    @required Platform platform,
+    @required ProcessManager processManager,
+    @required Logger logger,
+    @required FileSystem fileSystem,
+    @required Terminal terminal,
+  }) : _platform = platform,
+       _fileSystem = fileSystem,
+       _terminal = terminal,
+       _logger = logger,
+       _processUtils = ProcessUtils(logger: logger, processManager: processManager);
+
+  final Platform _platform;
+  final FileSystem _fileSystem;
+  final ProcessUtils _processUtils;
+  final Terminal _terminal;
+  final Logger _logger;
+
   static const String _executable = '/usr/bin/xcodebuild';
   static final RegExp _versionRegex = RegExp(r'Xcode ([0-9.]+)');
 
   void _updateVersion() {
-    if (!platform.isMacOS || !fs.file(_executable).existsSync()) {
+    if (!_platform.isMacOS || !_fileSystem.file(_executable).existsSync()) {
       return;
     }
     try {
-      final ProcessResult result = processManager.runSync(<String>[_executable, '-version']);
+      final RunResult result = _processUtils.runSync(
+        <String>[_executable, '-version'],
+      );
       if (result.exitCode != 0) {
         return;
       }
       _versionText = result.stdout.trim().replaceAll('\n', ', ');
       final Match match = _versionRegex.firstMatch(versionText);
-      if (match == null)
+      if (match == null) {
         return;
+      }
       final String version = match.group(1);
       final List<String> components = version.split('.');
       _majorVersion = int.parse(components[0]);
@@ -232,111 +298,130 @@ class XcodeProjectInterpreter {
 
   String _versionText;
   String get versionText {
-    if (_versionText == null)
+    if (_versionText == null) {
       _updateVersion();
+    }
     return _versionText;
   }
 
   int _majorVersion;
   int get majorVersion {
-    if (_majorVersion == null)
+    if (_majorVersion == null) {
       _updateVersion();
+    }
     return _majorVersion;
   }
 
   int _minorVersion;
   int get minorVersion {
-    if (_minorVersion == null)
+    if (_minorVersion == null) {
       _updateVersion();
-    return _minorVersion;
-  }
-
-  /// Synchronously retrieve xcode build settings. Prefer using the async
-  /// version below.
-  Map<String, String> getBuildSettings(String projectPath, String target) {
-    try {
-      final String out = runCheckedSync(<String>[
-        _executable,
-        '-project',
-        fs.path.absolute(projectPath),
-        '-target',
-        target,
-        '-showBuildSettings',
-      ], workingDirectory: projectPath);
-      return parseXcodeBuildSettings(out);
-    } catch(error) {
-      printTrace('Unexpected failure to get the build settings: $error.');
-      return const <String, String>{};
     }
+    return _minorVersion;
   }
 
   /// Asynchronously retrieve xcode build settings. This one is preferred for
   /// new call-sites.
-  Future<Map<String, String>> getBuildSettingsAsync(
-      String projectPath, String target, {
+  Future<Map<String, String>> getBuildSettings(
+    String projectPath,
+    String target, {
     Duration timeout = const Duration(minutes: 1),
   }) async {
     final Status status = Status.withSpinner(
-      timeout: timeoutConfiguration.fastOperation,
+      timeout: const TimeoutConfiguration().fastOperation,
+      timeoutConfiguration: const TimeoutConfiguration(),
+      stopwatch: Stopwatch(),
+      terminal: _terminal,
     );
     final List<String> showBuildSettingsCommand = <String>[
       _executable,
       '-project',
-      fs.path.absolute(projectPath),
+      _fileSystem.path.absolute(projectPath),
       '-target',
       target,
       '-showBuildSettings',
+      ...environmentVariablesAsXcodeBuildSettings(_platform)
     ];
     try {
-      // showBuildSettings is reported to ocassionally timeout. Here, we give it
+      // showBuildSettings is reported to occasionally timeout. Here, we give it
       // a lot of wiggle room (locally on Flutter Gallery, this takes ~1s).
       // When there is a timeout, we retry once.
-      final RunResult result = await runCheckedAsync(
+      final RunResult result = await _processUtils.run(
         showBuildSettingsCommand,
+        throwOnError: true,
         workingDirectory: projectPath,
         timeout: timeout,
         timeoutRetries: 1,
       );
       final String out = result.stdout.trim();
       return parseXcodeBuildSettings(out);
-    } catch(error) {
+    } on Exception catch (error) {
       if (error is ProcessException && error.toString().contains('timed out')) {
         BuildEvent('xcode-show-build-settings-timeout',
           command: showBuildSettingsCommand.join(' '),
         ).send();
       }
-      printTrace('Unexpected failure to get the build settings: $error.');
+      _logger.printTrace('Unexpected failure to get the build settings: $error.');
       return const <String, String>{};
     } finally {
       status.stop();
     }
   }
 
-  void cleanWorkspace(String workspacePath, String scheme) {
-    runSync(<String>[
+  Future<void> cleanWorkspace(String workspacePath, String scheme, { bool verbose = false }) async {
+    await _processUtils.run(<String>[
       _executable,
       '-workspace',
       workspacePath,
       '-scheme',
       scheme,
-      '-quiet',
-      'clean'
-    ], workingDirectory: fs.currentDirectory.path);
+      if (!verbose)
+        '-quiet',
+      'clean',
+      ...environmentVariablesAsXcodeBuildSettings(_platform)
+    ], workingDirectory: _fileSystem.currentDirectory.path);
   }
 
   Future<XcodeProjectInfo> getInfo(String projectPath, {String projectFilename}) async {
-    final RunResult result = await runCheckedAsync(<String>[
-      _executable,
-      '-list',
-      if (projectFilename != null) ...<String>['-project', projectFilename],
-    ], workingDirectory: projectPath);
+    // The exit code returned by 'xcodebuild -list' when either:
+    // * -project is passed and the given project isn't there, or
+    // * no -project is passed and there isn't a project.
+    const int missingProjectExitCode = 66;
+    final RunResult result = await _processUtils.run(
+      <String>[
+        _executable,
+        '-list',
+        if (projectFilename != null) ...<String>['-project', projectFilename],
+      ],
+      throwOnError: true,
+      whiteListFailures: (int c) => c == missingProjectExitCode,
+      workingDirectory: projectPath,
+    );
+    if (result.exitCode == missingProjectExitCode) {
+      throwToolExit('Unable to get Xcode project information:\n ${result.stderr}');
+    }
     return XcodeProjectInfo.fromXcodeBuildOutput(result.toString());
   }
 }
 
+/// Environment variables prefixed by FLUTTER_XCODE_ will be passed as build configurations to xcodebuild.
+/// This allows developers to pass arbitrary build settings in without the tool needing to make a flag
+/// for or be aware of each one. This could be used to set code signing build settings in a CI
+/// environment without requiring settings changes in the Xcode project.
+List<String> environmentVariablesAsXcodeBuildSettings(Platform platform) {
+  const String xcodeBuildSettingPrefix = 'FLUTTER_XCODE_';
+  return platform.environment.entries.where((MapEntry<String, String> mapEntry) {
+    return mapEntry.key.startsWith(xcodeBuildSettingPrefix);
+  }).expand<String>((MapEntry<String, String> mapEntry) {
+    // Remove FLUTTER_XCODE_ prefix from the environment variable to get the build setting.
+    final String trimmedBuildSettingKey = mapEntry.key.substring(xcodeBuildSettingPrefix.length);
+    return <String>['$trimmedBuildSettingKey=${mapEntry.value}'];
+  }).toList();
+}
+
 Map<String, String> parseXcodeBuildSettings(String showBuildSettingsOutput) {
   final Map<String, String> settings = <String, String>{};
-  for (Match match in showBuildSettingsOutput.split('\n').map<Match>(_settingExpr.firstMatch)) {
+  for (final Match match in showBuildSettingsOutput.split('\n').map<Match>(_settingExpr.firstMatch)) {
     if (match != null) {
       settings[match[1]] = match[2];
     }
@@ -348,8 +433,9 @@ Map<String, String> parseXcodeBuildSettings(String showBuildSettingsOutput) {
 /// project and target.
 String substituteXcodeVariables(String str, Map<String, String> xcodeBuildSettings) {
   final Iterable<Match> matches = _varExpr.allMatches(str);
-  if (matches.isEmpty)
+  if (matches.isEmpty) {
     return str;
+  }
 
   return str.replaceAllMapped(_varExpr, (Match m) => xcodeBuildSettings[m[1]] ?? m[0]);
 }
@@ -365,7 +451,7 @@ class XcodeProjectInfo {
     final List<String> buildConfigurations = <String>[];
     final List<String> schemes = <String>[];
     List<String> collector;
-    for (String line in output.split('\n')) {
+    for (final String line in output.split('\n')) {
       if (line.isEmpty) {
         collector = null;
         continue;
@@ -381,8 +467,9 @@ class XcodeProjectInfo {
       }
       collector?.add(line.trim());
     }
-    if (schemes.isEmpty)
+    if (schemes.isEmpty) {
       schemes.add('Runner');
+    }
     return XcodeProjectInfo(targets, buildConfigurations, schemes);
   }
 
@@ -406,17 +493,17 @@ class XcodeProjectInfo {
   /// The expected build configuration for [buildInfo] and [scheme].
   static String expectedBuildConfigurationFor(BuildInfo buildInfo, String scheme) {
     final String baseConfiguration = _baseConfigurationFor(buildInfo);
-    if (buildInfo.flavor == null)
+    if (buildInfo.flavor == null) {
       return baseConfiguration;
-    else
-      return baseConfiguration + '-$scheme';
+    }
+    return baseConfiguration + '-$scheme';
   }
 
   /// Checks whether the [buildConfigurations] contains the specified string, without
   /// regard to case.
   bool hasBuildConfiguratinForBuildMode(String buildMode) {
     buildMode = buildMode.toLowerCase();
-    for (String name in buildConfigurations) {
+    for (final String name in buildConfigurations) {
       if (name.toLowerCase() == buildMode) {
         return true;
       }
@@ -427,8 +514,9 @@ class XcodeProjectInfo {
   /// best match.
   String schemeFor(BuildInfo buildInfo) {
     final String expectedScheme = expectedSchemeFor(buildInfo);
-    if (schemes.contains(expectedScheme))
+    if (schemes.contains(expectedScheme)) {
       return expectedScheme;
+    }
     return _uniqueMatch(schemes, (String candidate) {
       return candidate.toLowerCase() == expectedScheme.toLowerCase();
     });
@@ -438,32 +526,35 @@ class XcodeProjectInfo {
   /// null, if there is no unique best match.
   String buildConfigurationFor(BuildInfo buildInfo, String scheme) {
     final String expectedConfiguration = expectedBuildConfigurationFor(buildInfo, scheme);
-    if (hasBuildConfiguratinForBuildMode(expectedConfiguration))
+    if (hasBuildConfiguratinForBuildMode(expectedConfiguration)) {
       return expectedConfiguration;
+    }
     final String baseConfiguration = _baseConfigurationFor(buildInfo);
     return _uniqueMatch(buildConfigurations, (String candidate) {
       candidate = candidate.toLowerCase();
-      if (buildInfo.flavor == null)
+      if (buildInfo.flavor == null) {
         return candidate == expectedConfiguration.toLowerCase();
-      else
-        return candidate.contains(baseConfiguration.toLowerCase()) && candidate.contains(scheme.toLowerCase());
+      }
+      return candidate.contains(baseConfiguration.toLowerCase()) && candidate.contains(scheme.toLowerCase());
     });
   }
 
   static String _baseConfigurationFor(BuildInfo buildInfo) {
-    if (buildInfo.isDebug)
+    if (buildInfo.isDebug) {
       return 'Debug';
-    if (buildInfo.isProfile)
+    }
+    if (buildInfo.isProfile) {
       return 'Profile';
+    }
     return 'Release';
   }
 
   static String _uniqueMatch(Iterable<String> strings, bool matches(String s)) {
     final List<String> options = strings.where(matches).toList();
-    if (options.length == 1)
+    if (options.length == 1) {
       return options.first;
-    else
-      return null;
+    }
+    return null;
   }
 
   @override

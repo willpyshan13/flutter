@@ -1,4 +1,4 @@
-// Copyright 2015 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Flutter Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -387,8 +387,7 @@ void main() {
     expect(tester.takeException(), isFlutterError);
   });
 
-  testWidgets('Refresh starts while scroll view moves back to 0.0 after overscroll on iOS', (WidgetTester tester) async {
-    debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
+  testWidgets('Refresh starts while scroll view moves back to 0.0 after overscroll', (WidgetTester tester) async {
     refreshCalled = false;
     double lastScrollOffset;
     final ScrollController controller = ScrollController();
@@ -420,7 +419,40 @@ void main() {
     expect(controller.offset, greaterThan(lastScrollOffset));
     expect(controller.offset, lessThan(0.0));
     expect(refreshCalled, isTrue);
+  }, variant: const TargetPlatformVariant(<TargetPlatform>{ TargetPlatform.iOS,  TargetPlatform.macOS }));
 
-    debugDefaultTargetPlatformOverride = null;
+  testWidgets('RefreshIndicator does not force child to relayout', (WidgetTester tester) async {
+    int layoutCount = 0;
+
+    Widget layoutCallback(BuildContext context, BoxConstraints constraints) {
+      layoutCount++;
+      return ListView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        children: <String>['A', 'B', 'C', 'D', 'E', 'F'].map<Widget>((String item) {
+          return SizedBox(
+            height: 200.0,
+            child: Text(item),
+          );
+        }).toList(),
+      );
+    }
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: RefreshIndicator(
+          onRefresh: refresh,
+          child: LayoutBuilder(builder: layoutCallback),
+        ),
+      ),
+    );
+
+    await tester.fling(find.text('A'), const Offset(0.0, 300.0), 1000.0); // trigger refresh
+    await tester.pump();
+
+    await tester.pump(const Duration(seconds: 1)); // finish the scroll animation
+    await tester.pump(const Duration(seconds: 1)); // finish the indicator settle animation
+    await tester.pump(const Duration(seconds: 1)); // finish the indicator hide animation
+
+    expect(layoutCount, 1);
   });
 }

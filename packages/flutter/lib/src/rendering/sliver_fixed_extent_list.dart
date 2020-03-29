@@ -1,4 +1,4 @@
-// Copyright 2017 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Flutter Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -164,6 +164,7 @@ abstract class RenderSliverFixedExtentBoxAdaptor extends RenderSliverMultiBoxAda
 
   @override
   void performLayout() {
+    final SliverConstraints constraints = this.constraints;
     childManager.didStartLayout();
     childManager.setDidUnderflow(false);
 
@@ -195,7 +196,7 @@ abstract class RenderSliverFixedExtentBoxAdaptor extends RenderSliverMultiBoxAda
     if (firstChild == null) {
       if (!addInitialChild(index: firstIndex, layoutOffset: indexToLayoutOffset(itemExtent, firstIndex))) {
         // There are either no children, or we are past the end of all our children.
-        // If it is the later, we will need to find the first available child.
+        // If it is the latter, we will need to find the first available child.
         double max;
         if (childManager.childCount != null) {
           max = computeMaxScrollOffset(constraints, itemExtent);
@@ -204,13 +205,15 @@ abstract class RenderSliverFixedExtentBoxAdaptor extends RenderSliverMultiBoxAda
         } else {
           // We will have to find it manually.
           int possibleFirstIndex = firstIndex - 1;
-          while (possibleFirstIndex > 0 &&
+          while (
+            possibleFirstIndex > 0 &&
             !addInitialChild(
               index: possibleFirstIndex,
-              layoutOffset: indexToLayoutOffset(itemExtent, possibleFirstIndex)
+              layoutOffset: indexToLayoutOffset(itemExtent, possibleFirstIndex),
             )
-          )
+          ) {
             possibleFirstIndex -= 1;
+          }
           max = possibleFirstIndex * itemExtent;
         }
         geometry = SliverGeometry(
@@ -233,7 +236,7 @@ abstract class RenderSliverFixedExtentBoxAdaptor extends RenderSliverMultiBoxAda
         geometry = SliverGeometry(scrollOffsetCorrection: index * itemExtent);
         return;
       }
-      final SliverMultiBoxAdaptorParentData childParentData = child.parentData;
+      final SliverMultiBoxAdaptorParentData childParentData = child.parentData as SliverMultiBoxAdaptorParentData;
       childParentData.layoutOffset = indexToLayoutOffset(itemExtent, index);
       assert(childParentData.index == index);
       trailingChildWithLayout ??= child;
@@ -241,7 +244,7 @@ abstract class RenderSliverFixedExtentBoxAdaptor extends RenderSliverMultiBoxAda
 
     if (trailingChildWithLayout == null) {
       firstChild.layout(childConstraints);
-      final SliverMultiBoxAdaptorParentData childParentData = firstChild.parentData;
+      final SliverMultiBoxAdaptorParentData childParentData = firstChild.parentData as SliverMultiBoxAdaptorParentData;
       childParentData.layoutOffset = indexToLayoutOffset(itemExtent, firstIndex);
       trailingChildWithLayout = firstChild;
     }
@@ -261,7 +264,7 @@ abstract class RenderSliverFixedExtentBoxAdaptor extends RenderSliverMultiBoxAda
       }
       trailingChildWithLayout = child;
       assert(child != null);
-      final SliverMultiBoxAdaptorParentData childParentData = child.parentData;
+      final SliverMultiBoxAdaptorParentData childParentData = child.parentData as SliverMultiBoxAdaptorParentData;
       assert(childParentData.index == index);
       childParentData.layoutOffset = indexToLayoutOffset(itemExtent, childParentData.index);
     }
@@ -283,7 +286,7 @@ abstract class RenderSliverFixedExtentBoxAdaptor extends RenderSliverMultiBoxAda
         lastIndex: lastIndex,
         leadingScrollOffset: leadingScrollOffset,
         trailingScrollOffset: trailingScrollOffset,
-      )
+      ),
     );
 
     final double paintExtent = calculatePaintOffset(

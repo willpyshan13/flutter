@@ -1,8 +1,7 @@
-// Copyright 2015 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Flutter Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-@TestOn('!chrome') // flaky on CI
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/widgets.dart';
@@ -11,17 +10,34 @@ import 'package:flutter/gestures.dart';
 import '../widgets/semantics_tester.dart';
 
 void main() {
+  // Pumps and ensures that the BottomSheet animates non-linearly.
+  Future<void> _checkNonLinearAnimation(WidgetTester tester) async {
+    final Offset firstPosition = tester.getCenter(find.text('BottomSheet'));
+    await tester.pump(const Duration(milliseconds: 30));
+    final Offset secondPosition = tester.getCenter(find.text('BottomSheet'));
+    await tester.pump(const Duration(milliseconds: 30));
+    final Offset thirdPosition = tester.getCenter(find.text('BottomSheet'));
+
+    final double dyDelta1 = secondPosition.dy - firstPosition.dy;
+    final double dyDelta2 = thirdPosition.dy - secondPosition.dy;
+
+    // If the animation were linear, these two values would be the same.
+    expect(dyDelta1, isNot(closeTo(dyDelta2, 0.1)));
+  }
+
   testWidgets('Tapping on a modal BottomSheet should not dismiss it', (WidgetTester tester) async {
     BuildContext savedContext;
 
-    await tester.pumpWidget(MaterialApp(
-      home: Builder(
-        builder: (BuildContext context) {
-          savedContext = context;
-          return Container();
-        }
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Builder(
+          builder: (BuildContext context) {
+            savedContext = context;
+            return Container();
+          },
+        ),
       ),
-    ));
+    );
 
     await tester.pump();
     expect(find.text('BottomSheet'), findsNothing);
@@ -45,15 +61,15 @@ void main() {
     expect(showBottomSheetThenCalled, isFalse);
   });
 
-  testWidgets('Tapping outside a modal BottomSheet should dismiss it', (WidgetTester tester) async {
+  testWidgets('Tapping outside a modal BottomSheet should dismiss it by default', (WidgetTester tester) async {
     BuildContext savedContext;
 
     await tester.pumpWidget(MaterialApp(
       home: Builder(
-          builder: (BuildContext context) {
-            savedContext = context;
-            return Container();
-          }
+        builder: (BuildContext context) {
+          savedContext = context;
+          return Container();
+        },
       ),
     ));
 
@@ -72,12 +88,221 @@ void main() {
     expect(find.text('BottomSheet'), findsOneWidget);
     expect(showBottomSheetThenCalled, isFalse);
 
-    // Tap above the bottom sheet to dismiss it
+    // Tap above the bottom sheet to dismiss it.
     await tester.tapAt(const Offset(20.0, 20.0));
-    await tester.pump(); // bottom sheet dismiss animation starts
+    await tester.pumpAndSettle(); // Bottom sheet dismiss animation.
     expect(showBottomSheetThenCalled, isTrue);
-    await tester.pump(const Duration(seconds: 1)); // animation done
-    await tester.pump(const Duration(seconds: 1)); // rebuild frame
+    expect(find.text('BottomSheet'), findsNothing);
+  });
+
+  testWidgets('Tapping outside a modal BottomSheet should dismiss it when isDismissible=true', (WidgetTester tester) async {
+    BuildContext savedContext;
+
+    await tester.pumpWidget(MaterialApp(
+      home: Builder(
+        builder: (BuildContext context) {
+          savedContext = context;
+          return Container();
+        },
+      ),
+    ));
+
+    await tester.pump();
+    expect(find.text('BottomSheet'), findsNothing);
+
+    bool showBottomSheetThenCalled = false;
+    showModalBottomSheet<void>(
+      context: savedContext,
+      builder: (BuildContext context) => const Text('BottomSheet'),
+      isDismissible: true,
+    ).then<void>((void value) {
+      showBottomSheetThenCalled = true;
+    });
+
+    await tester.pumpAndSettle();
+    expect(find.text('BottomSheet'), findsOneWidget);
+    expect(showBottomSheetThenCalled, isFalse);
+
+    // Tap above the bottom sheet to dismiss it.
+    await tester.tapAt(const Offset(20.0, 20.0));
+    await tester.pumpAndSettle(); // Bottom sheet dismiss animation.
+    expect(showBottomSheetThenCalled, isTrue);
+    expect(find.text('BottomSheet'), findsNothing);
+  });
+
+  testWidgets('Verify that the BottomSheet animates non-linearly', (WidgetTester tester) async {
+    BuildContext savedContext;
+
+    await tester.pumpWidget(MaterialApp(
+      home: Builder(
+        builder: (BuildContext context) {
+          savedContext = context;
+          return Container();
+        },
+      ),
+    ));
+
+    await tester.pump();
+    expect(find.text('BottomSheet'), findsNothing);
+
+    showModalBottomSheet<void>(
+      context: savedContext,
+      builder: (BuildContext context) => const Text('BottomSheet'),
+    );
+    await tester.pump();
+
+    await _checkNonLinearAnimation(tester);
+    await tester.pumpAndSettle();
+
+    // Tap above the bottom sheet to dismiss it.
+    await tester.tapAt(const Offset(20.0, 20.0));
+    await tester.pump();
+    await _checkNonLinearAnimation(tester);
+    await tester.pumpAndSettle(); // Bottom sheet dismiss animation.
+    expect(find.text('BottomSheet'), findsNothing);
+  });
+
+  testWidgets('Tapping outside a modal BottomSheet should not dismiss it when isDismissible=false', (WidgetTester tester) async {
+    BuildContext savedContext;
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Builder(
+          builder: (BuildContext context) {
+            savedContext = context;
+            return Container();
+          },
+        ),
+      ),
+    );
+
+    await tester.pump();
+    expect(find.text('BottomSheet'), findsNothing);
+
+    bool showBottomSheetThenCalled = false;
+    showModalBottomSheet<void>(
+      context: savedContext,
+      builder: (BuildContext context) => const Text('BottomSheet'),
+      isDismissible: false,
+    ).then<void>((void value) {
+      showBottomSheetThenCalled = true;
+    });
+
+    await tester.pumpAndSettle();
+    expect(find.text('BottomSheet'), findsOneWidget);
+    expect(showBottomSheetThenCalled, isFalse);
+
+    // Tap above the bottom sheet, attempting to dismiss it.
+    await tester.tapAt(const Offset(20.0, 20.0));
+    await tester.pumpAndSettle(); // Bottom sheet should not dismiss.
+    expect(showBottomSheetThenCalled, isFalse);
+    expect(find.text('BottomSheet'), findsOneWidget);
+  });
+
+  testWidgets('Swiping down a modal BottomSheet should dismiss it by default', (WidgetTester tester) async {
+    BuildContext savedContext;
+
+    await tester.pumpWidget(MaterialApp(
+      home: Builder(
+        builder: (BuildContext context) {
+          savedContext = context;
+          return Container();
+        },
+      ),
+    ));
+
+    await tester.pump();
+    expect(find.text('BottomSheet'), findsNothing);
+
+    bool showBottomSheetThenCalled = false;
+    showModalBottomSheet<void>(
+      context: savedContext,
+      isDismissible: false,
+      builder: (BuildContext context) => const Text('BottomSheet'),
+    ).then<void>((void value) {
+      showBottomSheetThenCalled = true;
+    });
+
+    await tester.pumpAndSettle();
+    expect(find.text('BottomSheet'), findsOneWidget);
+    expect(showBottomSheetThenCalled, isFalse);
+
+    // Swipe the bottom sheet to dismiss it.
+    await tester.drag(find.text('BottomSheet'), const Offset(0.0, 150.0));
+    await tester.pumpAndSettle(); // Bottom sheet dismiss animation.
+    expect(showBottomSheetThenCalled, isTrue);
+    expect(find.text('BottomSheet'), findsNothing);
+  });
+
+  testWidgets('Swiping down a modal BottomSheet should not dismiss it when enableDrag is false', (WidgetTester tester) async {
+    BuildContext savedContext;
+
+    await tester.pumpWidget(MaterialApp(
+      home: Builder(
+        builder: (BuildContext context) {
+          savedContext = context;
+          return Container();
+        },
+      ),
+    ));
+
+    await tester.pump();
+    expect(find.text('BottomSheet'), findsNothing);
+
+    bool showBottomSheetThenCalled = false;
+    showModalBottomSheet<void>(
+      context: savedContext,
+      isDismissible: false,
+      enableDrag: false,
+      builder: (BuildContext context) => const Text('BottomSheet'),
+    ).then<void>((void value) {
+      showBottomSheetThenCalled = true;
+    });
+
+    await tester.pumpAndSettle();
+    expect(find.text('BottomSheet'), findsOneWidget);
+    expect(showBottomSheetThenCalled, isFalse);
+
+    // Swipe the bottom sheet, attempting to dismiss it.
+    await tester.drag(find.text('BottomSheet'), const Offset(0.0, 150.0));
+    await tester.pumpAndSettle(); // Bottom sheet should not dismiss.
+    expect(showBottomSheetThenCalled, isFalse);
+    expect(find.text('BottomSheet'), findsOneWidget);
+  });
+
+  testWidgets('Swiping down a modal BottomSheet should dismiss it when enableDrag is true', (WidgetTester tester) async {
+    BuildContext savedContext;
+
+    await tester.pumpWidget(MaterialApp(
+      home: Builder(
+        builder: (BuildContext context) {
+          savedContext = context;
+          return Container();
+        },
+      ),
+    ));
+
+    await tester.pump();
+    expect(find.text('BottomSheet'), findsNothing);
+
+    bool showBottomSheetThenCalled = false;
+    showModalBottomSheet<void>(
+      context: savedContext,
+      isDismissible: false,
+      enableDrag: true,
+      builder: (BuildContext context) => const Text('BottomSheet'),
+    ).then<void>((void value) {
+      showBottomSheetThenCalled = true;
+    });
+
+    await tester.pumpAndSettle();
+    expect(find.text('BottomSheet'), findsOneWidget);
+    expect(showBottomSheetThenCalled, isFalse);
+
+    // Swipe the bottom sheet to dismiss it.
+    await tester.drag(find.text('BottomSheet'), const Offset(0.0, 150.0));
+    await tester.pumpAndSettle(); // Bottom sheet dismiss animation.
+    expect(showBottomSheetThenCalled, isTrue);
     expect(find.text('BottomSheet'), findsNothing);
   });
 
@@ -271,6 +496,7 @@ void main() {
     const double elevation = 9.0;
     final ShapeBorder shape = BeveledRectangleBorder(borderRadius: BorderRadius.circular(12));
     const Clip clipBehavior = Clip.antiAlias;
+    const Color barrierColor = Colors.red;
 
     await tester.pumpWidget(MaterialApp(
       home: Scaffold(
@@ -282,6 +508,7 @@ void main() {
     showModalBottomSheet<void>(
       context: scaffoldKey.currentContext,
       backgroundColor: color,
+      barrierColor: barrierColor,
       elevation: elevation,
       shape: shape,
       clipBehavior: clipBehavior,
@@ -300,6 +527,9 @@ void main() {
     expect(bottomSheet.elevation, elevation);
     expect(bottomSheet.shape, shape);
     expect(bottomSheet.clipBehavior, clipBehavior);
+
+    final ModalBarrier modalBarrier = tester.widget(find.byType(ModalBarrier).last);
+    expect(modalBarrier.color, barrierColor);
   });
 
   testWidgets('modal BottomSheet with scrollController has semantics', (WidgetTester tester) async {
@@ -309,8 +539,8 @@ void main() {
     await tester.pumpWidget(MaterialApp(
       home: Scaffold(
         key: scaffoldKey,
-        body: const Center(child: Text('body'))
-      )
+        body: const Center(child: Text('body')),
+      ),
     ));
 
 
@@ -380,7 +610,7 @@ void main() {
             BottomNavigationBarItem(
               icon: Icon(Icons.style),
               title: Text('Item 2'),
-            )
+            ),
           ],
         ),
       ),
@@ -409,7 +639,7 @@ void main() {
             BottomNavigationBarItem(
               icon: Icon(Icons.style),
               title: Text('Item 2'),
-            )
+            ),
           ],
         ),
       ),
@@ -447,7 +677,7 @@ class _TestPage extends StatelessWidget {
               builder: (_) => const Text('Modal bottom sheet'),
             );
           }
-        }
+        },
       ),
     );
   }

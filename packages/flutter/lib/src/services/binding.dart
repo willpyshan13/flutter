@@ -1,4 +1,4 @@
-// Copyright 2016 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Flutter Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -10,6 +10,7 @@ import 'package:flutter/foundation.dart';
 
 import 'asset_bundle.dart';
 import 'binary_messenger.dart';
+import 'system_channels.dart';
 
 /// Listens for platform messages and directs them to the [defaultBinaryMessenger].
 ///
@@ -23,9 +24,9 @@ mixin ServicesBinding on BindingBase {
     super.initInstances();
     _instance = this;
     _defaultBinaryMessenger = createBinaryMessenger();
-    window
-      ..onPlatformMessage = defaultBinaryMessenger.handlePlatformMessage;
+    window.onPlatformMessage = defaultBinaryMessenger.handlePlatformMessage;
     initLicenses();
+    SystemChannels.system.setMessageHandler(handleSystemMessage);
   }
 
   /// The current [ServicesBinding], if one has been created.
@@ -46,6 +47,14 @@ mixin ServicesBinding on BindingBase {
   BinaryMessenger createBinaryMessenger() {
     return const _DefaultBinaryMessenger._();
   }
+
+  /// Handler called for messages received on the [SystemChannels.system]
+  /// message channel.
+  ///
+  /// Other bindings may override this to respond to incoming system messages.
+  @protected
+  @mustCallSuper
+  Future<void> handleSystemMessage(Object systemMessage) async { }
 
   /// Adds relevant licenses to the [LicenseRegistry].
   ///
@@ -91,7 +100,7 @@ mixin ServicesBinding on BindingBase {
     final String _licenseSeparator = '\n' + ('-' * 80) + '\n';
     final List<LicenseEntry> result = <LicenseEntry>[];
     final List<String> licenses = rawLicenses.split(_licenseSeparator);
-    for (String license in licenses) {
+    for (final String license in licenses) {
       final int split = license.indexOf('\n\n');
       if (split >= 0) {
         result.add(LicenseEntryWithLineBreaks(
@@ -186,8 +195,12 @@ class _DefaultBinaryMessenger extends BinaryMessenger {
     ByteData response;
     try {
       final MessageHandler handler = _handlers[channel];
-      if (handler != null)
+      if (handler != null) {
         response = await handler(data);
+      } else {
+        ui.channelBuffers.push(channel, data, callback);
+        callback = null;
+      }
     } catch (exception, stack) {
       FlutterError.reportError(FlutterErrorDetails(
         exception: exception,
@@ -196,7 +209,9 @@ class _DefaultBinaryMessenger extends BinaryMessenger {
         context: ErrorDescription('during a platform message callback'),
       ));
     } finally {
-      callback(response);
+      if (callback != null) {
+        callback(response);
+      }
     }
   }
 
@@ -214,6 +229,9 @@ class _DefaultBinaryMessenger extends BinaryMessenger {
       _handlers.remove(channel);
     else
       _handlers[channel] = handler;
+    ui.channelBuffers.drain(channel, (ByteData data, ui.PlatformMessageResponseCallback callback) async {
+      await handlePlatformMessage(channel, data, callback);
+    });
   }
 
   @override

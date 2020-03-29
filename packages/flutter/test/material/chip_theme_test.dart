@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Flutter Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -169,7 +169,7 @@ void main() {
   testWidgets('ChipThemeData generates correct opacities for defaults', (WidgetTester tester) async {
     const Color customColor1 = Color(0xcafefeed);
     const Color customColor2 = Color(0xdeadbeef);
-    final TextStyle customStyle = ThemeData.fallback().accentTextTheme.body2.copyWith(color: customColor2);
+    final TextStyle customStyle = ThemeData.fallback().textTheme.bodyText1.copyWith(color: customColor2);
 
     final ChipThemeData lightTheme = ChipThemeData.fromDefaults(
       secondaryColor: customColor1,
@@ -184,7 +184,7 @@ void main() {
     expect(lightTheme.secondarySelectedColor, equals(customColor1.withAlpha(0x3d)));
     expect(lightTheme.labelPadding, equals(const EdgeInsets.symmetric(horizontal: 8.0)));
     expect(lightTheme.padding, equals(const EdgeInsets.all(4.0)));
-    expect(lightTheme.shape, equals(isInstanceOf<StadiumBorder>()));
+    expect(lightTheme.shape, isA<StadiumBorder>());
     expect(lightTheme.labelStyle.color, equals(Colors.black.withAlpha(0xde)));
     expect(lightTheme.secondaryLabelStyle.color, equals(customColor1.withAlpha(0xde)));
     expect(lightTheme.brightness, equals(Brightness.light));
@@ -202,7 +202,7 @@ void main() {
     expect(darkTheme.secondarySelectedColor, equals(customColor1.withAlpha(0x3d)));
     expect(darkTheme.labelPadding, equals(const EdgeInsets.symmetric(horizontal: 8.0)));
     expect(darkTheme.padding, equals(const EdgeInsets.all(4.0)));
-    expect(darkTheme.shape, equals(isInstanceOf<StadiumBorder>()));
+    expect(darkTheme.shape, isA<StadiumBorder>());
     expect(darkTheme.labelStyle.color, equals(Colors.white.withAlpha(0xde)));
     expect(darkTheme.secondaryLabelStyle.color, equals(customColor1.withAlpha(0xde)));
     expect(darkTheme.brightness, equals(Brightness.dark));
@@ -220,7 +220,7 @@ void main() {
     expect(customTheme.secondarySelectedColor, equals(customColor2.withAlpha(0x3d)));
     expect(customTheme.labelPadding, equals(const EdgeInsets.symmetric(horizontal: 8.0)));
     expect(customTheme.padding, equals(const EdgeInsets.all(4.0)));
-    expect(customTheme.shape, equals(isInstanceOf<StadiumBorder>()));
+    expect(customTheme.shape, isA<StadiumBorder>());
     expect(customTheme.labelStyle.color, equals(customColor1.withAlpha(0xde)));
     expect(customTheme.secondaryLabelStyle.color, equals(customColor2.withAlpha(0xde)));
     expect(customTheme.brightness, equals(Brightness.light));
@@ -230,17 +230,18 @@ void main() {
     final ChipThemeData chipThemeBlack = ChipThemeData.fromDefaults(
       secondaryColor: Colors.black,
       brightness: Brightness.dark,
-      labelStyle: ThemeData.fallback().accentTextTheme.body2.copyWith(color: Colors.black),
+      labelStyle: ThemeData.fallback().textTheme.bodyText1.copyWith(color: Colors.black),
     ).copyWith(
       elevation: 1.0,
       pressElevation: 4.0,
       shadowColor: Colors.black,
       selectedShadowColor: Colors.black,
+      checkmarkColor: Colors.black,
     );
     final ChipThemeData chipThemeWhite = ChipThemeData.fromDefaults(
       secondaryColor: Colors.white,
       brightness: Brightness.light,
-      labelStyle: ThemeData.fallback().accentTextTheme.body2.copyWith(color: Colors.white),
+      labelStyle: ThemeData.fallback().textTheme.bodyText1.copyWith(color: Colors.white),
     ).copyWith(
       padding: const EdgeInsets.all(2.0),
       labelPadding: const EdgeInsets.only(top: 8.0, bottom: 8.0),
@@ -248,6 +249,7 @@ void main() {
       pressElevation: 10.0,
       shadowColor: Colors.white,
       selectedShadowColor: Colors.white,
+      checkmarkColor: Colors.white,
     );
 
     final ChipThemeData lerp = ChipThemeData.lerp(chipThemeBlack, chipThemeWhite, 0.5);
@@ -261,12 +263,13 @@ void main() {
     expect(lerp.selectedShadowColor, equals(middleGrey));
     expect(lerp.labelPadding, equals(const EdgeInsets.all(4.0)));
     expect(lerp.padding, equals(const EdgeInsets.all(3.0)));
-    expect(lerp.shape, equals(isInstanceOf<StadiumBorder>()));
+    expect(lerp.shape, isA<StadiumBorder>());
     expect(lerp.labelStyle.color, equals(middleGrey.withAlpha(0xde)));
     expect(lerp.secondaryLabelStyle.color, equals(middleGrey.withAlpha(0xde)));
     expect(lerp.brightness, equals(Brightness.light));
     expect(lerp.elevation, 3.0);
     expect(lerp.pressElevation, 7.0);
+    expect(lerp.checkmarkColor, equals(middleGrey));
 
     expect(ChipThemeData.lerp(null, null, 0.25), isNull);
 
@@ -280,12 +283,13 @@ void main() {
     expect(lerpANull25.selectedShadowColor, equals(Colors.white.withAlpha(0x40)));
     expect(lerpANull25.labelPadding, equals(const EdgeInsets.only(left: 0.0, top: 2.0, right: 0.0, bottom: 2.0)));
     expect(lerpANull25.padding, equals(const EdgeInsets.all(0.5)));
-    expect(lerpANull25.shape, equals(isInstanceOf<StadiumBorder>()));
+    expect(lerpANull25.shape, isA<StadiumBorder>());
     expect(lerpANull25.labelStyle.color, equals(Colors.black.withAlpha(0x38)));
     expect(lerpANull25.secondaryLabelStyle.color, equals(Colors.white.withAlpha(0x38)));
     expect(lerpANull25.brightness, equals(Brightness.light));
     expect(lerpANull25.elevation, 1.25);
     expect(lerpANull25.pressElevation, 2.5);
+    expect(lerpANull25.checkmarkColor, equals(Colors.white.withAlpha(0x40)));
 
     final ChipThemeData lerpANull75 = ChipThemeData.lerp(null, chipThemeWhite, 0.75);
     expect(lerpANull75.backgroundColor, equals(Colors.black.withAlpha(0x17)));
@@ -297,12 +301,13 @@ void main() {
     expect(lerpANull75.selectedShadowColor, equals(Colors.white.withAlpha(0xbf)));
     expect(lerpANull75.labelPadding, equals(const EdgeInsets.only(left: 0.0, top: 6.0, right: 0.0, bottom: 6.0)));
     expect(lerpANull75.padding, equals(const EdgeInsets.all(1.5)));
-    expect(lerpANull75.shape, equals(isInstanceOf<StadiumBorder>()));
+    expect(lerpANull75.shape, isA<StadiumBorder>());
     expect(lerpANull75.labelStyle.color, equals(Colors.black.withAlpha(0xa7)));
     expect(lerpANull75.secondaryLabelStyle.color, equals(Colors.white.withAlpha(0xa7)));
     expect(lerpANull75.brightness, equals(Brightness.light));
     expect(lerpANull75.elevation, 3.75);
     expect(lerpANull75.pressElevation, 7.5);
+    expect(lerpANull75.checkmarkColor, equals(Colors.white.withAlpha(0xbf)));
 
     final ChipThemeData lerpBNull25 = ChipThemeData.lerp(chipThemeBlack, null, 0.25);
     expect(lerpBNull25.backgroundColor, equals(Colors.white.withAlpha(0x17)));
@@ -314,12 +319,13 @@ void main() {
     expect(lerpBNull25.selectedShadowColor, equals(Colors.black.withAlpha(0xbf)));
     expect(lerpBNull25.labelPadding, equals(const EdgeInsets.only(left: 6.0, top: 0.0, right: 6.0, bottom: 0.0)));
     expect(lerpBNull25.padding, equals(const EdgeInsets.all(3.0)));
-    expect(lerpBNull25.shape, equals(isInstanceOf<StadiumBorder>()));
+    expect(lerpBNull25.shape, isA<StadiumBorder>());
     expect(lerpBNull25.labelStyle.color, equals(Colors.white.withAlpha(0xa7)));
     expect(lerpBNull25.secondaryLabelStyle.color, equals(Colors.black.withAlpha(0xa7)));
     expect(lerpBNull25.brightness, equals(Brightness.dark));
     expect(lerpBNull25.elevation, 0.75);
     expect(lerpBNull25.pressElevation, 3.0);
+    expect(lerpBNull25.checkmarkColor, equals(Colors.black.withAlpha(0xbf)));
 
     final ChipThemeData lerpBNull75 = ChipThemeData.lerp(chipThemeBlack, null, 0.75);
     expect(lerpBNull75.backgroundColor, equals(Colors.white.withAlpha(0x08)));
@@ -331,12 +337,13 @@ void main() {
     expect(lerpBNull75.selectedShadowColor, equals(Colors.black.withAlpha(0x40)));
     expect(lerpBNull75.labelPadding, equals(const EdgeInsets.only(left: 2.0, top: 0.0, right: 2.0, bottom: 0.0)));
     expect(lerpBNull75.padding, equals(const EdgeInsets.all(1.0)));
-    expect(lerpBNull75.shape, equals(isInstanceOf<StadiumBorder>()));
+    expect(lerpBNull75.shape, isA<StadiumBorder>());
     expect(lerpBNull75.labelStyle.color, equals(Colors.white.withAlpha(0x38)));
     expect(lerpBNull75.secondaryLabelStyle.color, equals(Colors.black.withAlpha(0x38)));
     expect(lerpBNull75.brightness, equals(Brightness.light));
     expect(lerpBNull75.elevation, 0.25);
     expect(lerpBNull75.pressElevation, 1.0);
+    expect(lerpBNull75.checkmarkColor, equals(Colors.black.withAlpha(0x40)));
   });
 
   testWidgets('Chip uses stateful color from chip theme', (WidgetTester tester) async {

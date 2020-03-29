@@ -1,4 +1,4 @@
-// Copyright 2016 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Flutter Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -11,14 +11,11 @@ import 'test_widgets.dart';
 
 void main() {
   testWidgets('simultaneously dispose a widget and end the scroll animation', (WidgetTester tester) async {
-    final List<Widget> textWidgets = <Widget>[];
-    for (int i = 0; i < 250; i++)
-      textWidgets.add(Text('$i'));
     await tester.pumpWidget(
       Directionality(
         textDirection: TextDirection.ltr,
         child: FlipWidget(
-          left: ListView(children: textWidgets),
+          left: ListView(children: List<Widget>.generate(250, (int i) => Text('$i'))),
           right: Container(),
         ),
       ),
@@ -31,10 +28,9 @@ void main() {
     await tester.pump(const Duration(hours: 5));
   });
 
-  testWidgets('Disposing a (nested) Scrollable while holding in overscroll (iOS) does not crash', (WidgetTester tester) async {
+  testWidgets('Disposing a (nested) Scrollable while holding in overscroll does not crash', (WidgetTester tester) async {
     // Regression test for https://github.com/flutter/flutter/issues/27707.
 
-    debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
     final ScrollController controller = ScrollController();
     final Key outterContainer = GlobalKey();
 
@@ -87,11 +83,9 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         home: Container(),
-      )
+      ),
     );
     await tester.pumpAndSettle();
     expect(controller.hasClients, isFalse);
-
-    debugDefaultTargetPlatformOverride = null;
-  });
+  }, variant: const TargetPlatformVariant(<TargetPlatform>{ TargetPlatform.iOS,  TargetPlatform.macOS }));
 }

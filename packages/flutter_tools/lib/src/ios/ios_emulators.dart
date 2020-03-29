@@ -1,24 +1,21 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Flutter Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 import 'dart:async';
 
-import '../base/platform.dart';
 import '../base/process.dart';
 import '../device.dart';
 import '../emulator.dart';
-import '../globals.dart';
-import '../macos/xcode.dart';
-import 'ios_workflow.dart';
+import '../globals.dart' as globals;
 import 'simulators.dart';
 
 class IOSEmulators extends EmulatorDiscovery {
   @override
-  bool get supportsPlatform => platform.isMacOS;
+  bool get supportsPlatform => globals.platform.isMacOS;
 
   @override
-  bool get canListAnything => iosWorkflow.canListEmulators;
+  bool get canListAnything => globals.iosWorkflow.canListEmulators;
 
   @override
   Future<List<Emulator>> get emulators async => getEmulators();
@@ -42,22 +39,25 @@ class IOSEmulator extends Emulator {
   @override
   Future<void> launch() async {
     Future<bool> launchSimulator(List<String> additionalArgs) async {
-      final List<String> args = <String>['open']
-          .followedBy(additionalArgs)
-          .followedBy(<String>['-a', xcode.getSimulatorPath()])
-          .toList();
+      final List<String> args = <String>[
+        'open',
+        ...additionalArgs,
+        '-a',
+        globals.xcode.getSimulatorPath(),
+      ];
 
-      final RunResult launchResult = await runAsync(args);
+      final RunResult launchResult = await processUtils.run(args);
       if (launchResult.exitCode != 0) {
-        printError('$launchResult');
+        globals.printError('$launchResult');
         return false;
       }
       return true;
     }
 
     // First run with `-n` to force a device to boot if there isn't already one
-    if (!await launchSimulator(<String>['-n']))
+    if (!await launchSimulator(<String>['-n'])) {
       return;
+    }
 
     // Run again to force it to Foreground (using -n doesn't force existing
     // devices to the foreground)
@@ -67,7 +67,7 @@ class IOSEmulator extends Emulator {
 
 /// Return the list of iOS Simulators (there can only be zero or one).
 List<IOSEmulator> getEmulators() {
-  final String simulatorPath = xcode.getSimulatorPath();
+  final String simulatorPath = globals.xcode.getSimulatorPath();
   if (simulatorPath == null) {
     return <IOSEmulator>[];
   }

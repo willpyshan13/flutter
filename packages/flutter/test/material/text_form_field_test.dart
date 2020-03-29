@@ -1,4 +1,4 @@
-// Copyright 2017 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Flutter Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -30,6 +30,28 @@ void main() {
 
     final TextField textFieldWidget = tester.widget(textFieldFinder);
     expect(textFieldWidget.textAlign, alignment);
+  });
+
+  testWidgets('Passes scrollPhysics to underlying TextField', (WidgetTester tester) async {
+    const ScrollPhysics scrollPhysics = ScrollPhysics();
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Material(
+          child: Center(
+            child: TextFormField(
+              scrollPhysics: scrollPhysics,
+            ),
+          ),
+        ),
+      ),
+    );
+
+    final Finder textFieldFinder = find.byType(TextField);
+    expect(textFieldFinder, findsOneWidget);
+
+    final TextField textFieldWidget = tester.widget(textFieldFinder);
+    expect(textFieldWidget.scrollPhysics, scrollPhysics);
   });
 
   testWidgets('Passes textAlignVertical to underlying TextField', (WidgetTester tester) async {
@@ -176,7 +198,10 @@ void main() {
           child: Center(
             child: TextFormField(
               autovalidate: true,
-              validator: (String value) { _validateCalled++; return null; },
+              validator: (String value) {
+                _validateCalled++;
+                return null;
+              },
             ),
           ),
         ),
@@ -199,7 +224,10 @@ void main() {
             child: TextFormField(
               enabled: true,
               autovalidate: true,
-              validator: (String value) { _validateCalled += 1; return null; },
+              validator: (String value) {
+                _validateCalled += 1;
+                return null;
+              },
             ),
           ),
         ),
@@ -275,7 +303,7 @@ void main() {
 
     await tester.pump(const Duration(milliseconds: 200));
     expect(renderEditable, paintsExactlyCountTimes(#drawRect, 0));
-  });
+  }, skip: isBrowser); // we do not use Flutter-rendered context menu on the Web
 
   testWidgets('onTap is called upon tap', (WidgetTester tester) async {
     int tapCount = 0;

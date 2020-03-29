@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Flutter Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -80,6 +80,9 @@ class _PlatformBinaryMessenger extends BinaryMessenger {
       final MessageHandler handler = _handlers[channel];
       if (handler != null) {
         response = await handler(data);
+      } else {
+        ui.channelBuffers.push(channel, data, callback);
+        callback = null;
       }
     } catch (exception, stack) {
       FlutterError.reportError(FlutterErrorDetails(
@@ -89,15 +92,29 @@ class _PlatformBinaryMessenger extends BinaryMessenger {
         context: ErrorDescription('during a plugin platform message call'),
       ));
     } finally {
-      callback(response);
+      if (callback != null) {
+        callback(response);
+      }
     }
   }
 
   /// Sends a platform message from the platform side back to the framework.
   @override
   Future<ByteData> send(String channel, ByteData message) {
-    throw FlutterError(
-        'Cannot send messages from the platform side to the framework.');
+    final Completer<ByteData> completer = Completer<ByteData>();
+    ui.window.onPlatformMessage(channel, message, (ByteData reply) {
+      try {
+        completer.complete(reply);
+      } catch (exception, stack) {
+        FlutterError.reportError(FlutterErrorDetails(
+          exception: exception,
+          stack: stack,
+          library: 'flutter web shell',
+          context: ErrorDescription('during a plugin-to-framework message'),
+        ));
+      }
+    });
+    return completer.future;
   }
 
   @override
@@ -107,6 +124,9 @@ class _PlatformBinaryMessenger extends BinaryMessenger {
       _handlers.remove(channel);
     else
       _handlers[channel] = handler;
+    ui.channelBuffers.drain(channel, (ByteData data, ui.PlatformMessageResponseCallback callback) async {
+      await handlePlatformMessage(channel, data, callback);
+    });
   }
 
   @override

@@ -1,4 +1,4 @@
-// Copyright 2015 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Flutter Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -92,6 +92,12 @@ void main() {
     expect(renderClip.clipBehavior, equals(Clip.hardEdge));
   });
 
+  test('ClipRRect constructs with the right default values', () {
+    const ClipRRect clipRRect = ClipRRect();
+    expect(clipRRect.clipBehavior, equals(Clip.antiAlias));
+    expect(clipRRect.borderRadius, equals(BorderRadius.zero));
+  });
+
   testWidgets('ClipRRect updates clipBehavior in updateRenderObject', (WidgetTester tester) async {
     await tester.pumpWidget(_UpdateCountedClipRRect());
 
@@ -136,7 +142,7 @@ void main() {
           behavior: HitTestBehavior.opaque,
           onTap: () { log.add('tap'); },
         ),
-      )
+      ),
     );
     expect(log, equals(<String>['getClip']));
 
@@ -156,7 +162,7 @@ void main() {
           behavior: HitTestBehavior.opaque,
           onTap: () { log.add('tap'); },
         ),
-      )
+      ),
     );
     expect(log, equals(<String>[]));
 
@@ -179,7 +185,7 @@ void main() {
             onTap: () { log.add('tap'); },
           ),
         ),
-      )
+      ),
     );
     expect(log, equals(<String>[]));
 
@@ -207,7 +213,7 @@ void main() {
             ),
           ),
         ),
-      )
+      ),
     );
     expect(log, equals(<String>['a']));
 
@@ -231,7 +237,7 @@ void main() {
             ),
           ),
         ),
-      )
+      ),
     );
     expect(log, equals(<String>['a', 'tap']));
 
@@ -249,7 +255,7 @@ void main() {
             ),
           ),
         ),
-      )
+      ),
     );
     expect(log, equals(<String>['a', 'tap', 'a']));
 
@@ -267,7 +273,7 @@ void main() {
             ),
           ),
         ),
-      )
+      ),
     );
     expect(log, equals(<String>['a', 'tap', 'a']));
 
@@ -285,7 +291,7 @@ void main() {
             ),
           ),
         ),
-      )
+      ),
     );
     expect(log, equals(<String>['a', 'tap', 'a', 'b']));
 
@@ -303,7 +309,7 @@ void main() {
             ),
           ),
         ),
-      )
+      ),
     );
     expect(log, equals(<String>['a', 'tap', 'a', 'b', 'c']));
 
@@ -375,12 +381,9 @@ void main() {
     );
     await expectLater(
       find.byType(RepaintBoundary).first,
-      matchesGoldenFile(
-        'clip.ClipRect.png',
-        version: 1,
-      ),
+      matchesGoldenFile('clip.ClipRect.png'),
     );
-  }, skip: isBrowser);
+  });
 
   testWidgets('ClipRect save, overlay, and antialiasing', (WidgetTester tester) async {
     await tester.pumpWidget(
@@ -418,12 +421,9 @@ void main() {
     );
     await expectLater(
       find.byType(RepaintBoundary).first,
-      matchesGoldenFile(
-        'clip.ClipRectOverlay.png',
-        version: 1,
-      ),
+      matchesGoldenFile('clip.ClipRectOverlay.png'),
     );
-  }, skip: isBrowser);
+  });
 
   testWidgets('ClipRRect painting', (WidgetTester tester) async {
     await tester.pumpWidget(
@@ -470,12 +470,9 @@ void main() {
     );
     await expectLater(
       find.byType(RepaintBoundary).first,
-      matchesGoldenFile(
-        'clip.ClipRRect.png',
-        version: 1,
-      ),
+      matchesGoldenFile('clip.ClipRRect.png'),
     );
-  }, skip: isBrowser);
+  });
 
   testWidgets('ClipOval painting', (WidgetTester tester) async {
     await tester.pumpWidget(
@@ -516,12 +513,9 @@ void main() {
     );
     await expectLater(
       find.byType(RepaintBoundary).first,
-      matchesGoldenFile(
-        'clip.ClipOval.png',
-        version: 1,
-      ),
+      matchesGoldenFile('clip.ClipOval.png'),
     );
-  }, skip: isBrowser);
+  });
 
   testWidgets('ClipPath painting', (WidgetTester tester) async {
     await tester.pumpWidget(
@@ -567,12 +561,9 @@ void main() {
     );
     await expectLater(
       find.byType(RepaintBoundary).first,
-      matchesGoldenFile(
-        'clip.ClipPath.png',
-        version: 1,
-      ),
+      matchesGoldenFile('clip.ClipPath.png'),
     );
-  }, skip: isBrowser);
+  });
 
   Center genPhysicalModel(Clip clipBehavior) {
     return Center(
@@ -615,23 +606,17 @@ void main() {
     await tester.pumpWidget(genPhysicalModel(Clip.antiAlias));
     await expectLater(
       find.byType(RepaintBoundary).first,
-      matchesGoldenFile(
-        'clip.PhysicalModel.antiAlias.png',
-        version: 1,
-      ),
+      matchesGoldenFile('clip.PhysicalModel.antiAlias.png'),
     );
-  }, skip: isBrowser);
+  });
 
   testWidgets('PhysicalModel painting with Clip.hardEdge', (WidgetTester tester) async {
     await tester.pumpWidget(genPhysicalModel(Clip.hardEdge));
     await expectLater(
       find.byType(RepaintBoundary).first,
-      matchesGoldenFile(
-        'clip.PhysicalModel.hardEdge.png',
-        version: 1,
-      ),
+      matchesGoldenFile('clip.PhysicalModel.hardEdge.png'),
     );
-  }, skip: isBrowser);
+  });
 
   // There will be bleeding edges on the rect edges, but there shouldn't be any bleeding edges on the
   // round corners.
@@ -639,12 +624,9 @@ void main() {
     await tester.pumpWidget(genPhysicalModel(Clip.antiAliasWithSaveLayer));
     await expectLater(
       find.byType(RepaintBoundary).first,
-      matchesGoldenFile(
-        'clip.PhysicalModel.antiAliasWithSaveLayer.png',
-        version: null,
-      ),
+      matchesGoldenFile('clip.PhysicalModel.antiAliasWithSaveLayer.png'),
     );
-  }, skip: isBrowser);
+  });
 
   testWidgets('Default PhysicalModel painting', (WidgetTester tester) async {
     await tester.pumpWidget(
@@ -684,12 +666,9 @@ void main() {
     );
     await expectLater(
       find.byType(RepaintBoundary).first,
-      matchesGoldenFile(
-        'clip.PhysicalModel.default.png',
-        version: 1,
-      ),
+      matchesGoldenFile('clip.PhysicalModel.default.png'),
     );
-  }, skip: isBrowser);
+  });
 
   Center genPhysicalShape(Clip clipBehavior) {
     return Center(
@@ -736,34 +715,25 @@ void main() {
     await tester.pumpWidget(genPhysicalShape(Clip.antiAlias));
     await expectLater(
       find.byType(RepaintBoundary).first,
-      matchesGoldenFile(
-        'clip.PhysicalShape.antiAlias.png',
-        version: 1,
-      ),
+      matchesGoldenFile('clip.PhysicalShape.antiAlias.png'),
     );
-  }, skip: isBrowser);
+  });
 
   testWidgets('PhysicalShape painting with Clip.hardEdge', (WidgetTester tester) async {
     await tester.pumpWidget(genPhysicalShape(Clip.hardEdge));
     await expectLater(
       find.byType(RepaintBoundary).first,
-      matchesGoldenFile(
-        'clip.PhysicalShape.hardEdge.png',
-        version: 1,
-      ),
+      matchesGoldenFile('clip.PhysicalShape.hardEdge.png'),
     );
-  }, skip: isBrowser);
+  });
 
   testWidgets('PhysicalShape painting with Clip.antiAliasWithSaveLayer', (WidgetTester tester) async {
     await tester.pumpWidget(genPhysicalShape(Clip.antiAliasWithSaveLayer));
     await expectLater(
       find.byType(RepaintBoundary).first,
-      matchesGoldenFile(
-        'clip.PhysicalShape.antiAliasWithSaveLayer.png',
-        version: null,
-      ),
+      matchesGoldenFile('clip.PhysicalShape.antiAliasWithSaveLayer.png'),
     );
-  }, skip: isBrowser);
+  });
 
   testWidgets('PhysicalShape painting', (WidgetTester tester) async {
     await tester.pumpWidget(
@@ -807,12 +777,9 @@ void main() {
     );
     await expectLater(
       find.byType(RepaintBoundary).first,
-      matchesGoldenFile(
-        'clip.PhysicalShape.default.png',
-        version: 1,
-      ),
+      matchesGoldenFile('clip.PhysicalShape.default.png'),
     );
-  }, skip: isBrowser);
+  });
 
   testWidgets('ClipPath.shape', (WidgetTester tester) async {
     final List<String> logs = <String>[];

@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Flutter Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -28,23 +28,6 @@ const TextStyle _kActionSheetContentStyle = TextStyle(
   fontWeight: FontWeight.w400,
   color: _kContentTextColor,
   textBaseline: TextBaseline.alphabetic,
-);
-
-// This decoration is applied to the blurred backdrop to lighten the blurred
-// image. Brightening is done to counteract the dark modal barrier that
-// appears behind the alert. The overlay blend mode does the brightening.
-// The white color doesn't paint any white, it's a placeholder and is going to be
-// replaced by the resolved color of _kAlertBlurOverlayColor.
-const BoxDecoration _kAlertBlurOverlayDecoration = BoxDecoration(
-  color: CupertinoColors.white,
-  backgroundBlendMode: BlendMode.overlay,
-);
-
-// Color of the overlay.
-// Extracted from https://developer.apple.com/design/resources/.
-const Color _kAlertBlurOverlayColor = CupertinoDynamicColor.withBrightness(
-  color: Color(0x66000000),
-  darkColor: Color(0x99000000),
 );
 
 // Translucent, very light gray that is painted on top of the blurred backdrop
@@ -102,7 +85,8 @@ const double _kDividerThickness = 1.0;
 /// sheet title and message text style.
 ///
 /// To display action buttons that look like standard iOS action sheet buttons,
-/// provide [CupertinoActionSheetAction]s for the [actions] given to this action sheet.
+/// provide [CupertinoActionSheetAction]s for the [actions] given to this action
+/// sheet.
 ///
 /// To include a iOS-style cancel button separate from the other buttons,
 /// provide an [CupertinoActionSheetAction] for the [cancelButton] given to this
@@ -224,13 +208,9 @@ class CupertinoActionSheet extends StatelessWidget {
   Widget build(BuildContext context) {
     final List<Widget> children = <Widget>[
       Flexible(child: ClipRRect(
-        borderRadius: BorderRadius.circular(12.0),
-        child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: _kBlurAmount, sigmaY: _kBlurAmount),
-          child: Container(
-            decoration: _kAlertBlurOverlayDecoration.copyWith(
-              color: CupertinoDynamicColor.resolve(_kAlertBlurOverlayColor, context),
-            ),
+          borderRadius: BorderRadius.circular(12.0),
+          child: BackdropFilter(
+            filter: ImageFilter.blur(sigmaX: _kBlurAmount, sigmaY: _kBlurAmount),
             child: _CupertinoAlertRenderWidget(
               contentSection: Builder(builder: _buildContent),
               actionsSection: _buildActions(),
@@ -238,14 +218,8 @@ class CupertinoActionSheet extends StatelessWidget {
           ),
         ),
       ),
-      ),
+      if (cancelButton != null) _buildCancelButton(),
     ];
-
-    if (cancelButton != null) {
-      children.add(
-        _buildCancelButton(),
-      );
-    }
 
     final Orientation orientation = MediaQuery.of(context).orientation;
     double actionSheetWidth;
@@ -292,12 +266,14 @@ class CupertinoActionSheetAction extends StatelessWidget {
   ///
   /// The [child] and [onPressed] arguments must not be null.
   const CupertinoActionSheetAction({
+    Key key,
     @required this.onPressed,
     this.isDefaultAction = false,
     this.isDestructiveAction = false,
     @required this.child,
   }) : assert(child != null),
-       assert(onPressed != null);
+       assert(onPressed != null),
+       super(key: key);
 
   /// The callback that is called when the button is tapped.
   ///
@@ -323,7 +299,7 @@ class CupertinoActionSheetAction extends StatelessWidget {
   Widget build(BuildContext context) {
     TextStyle style = _kActionSheetActionStyle.copyWith(
       color: isDestructiveAction
-        ? CupertinoSystemColors.of(context).systemRed
+        ? CupertinoDynamicColor.resolve(CupertinoColors.systemRed, context)
         : CupertinoTheme.of(context).primaryColor,
     );
 
@@ -389,7 +365,7 @@ class _CupertinoActionSheetCancelButtonState extends State<_CupertinoActionSheet
   Widget build(BuildContext context) {
     final Color backgroundColor = isBeingPressed
       ? _kCancelPressedColor
-      : CupertinoSystemColors.of(context).secondarySystemGroupedBackground;
+      : CupertinoColors.secondarySystemGroupedBackground;
     return GestureDetector(
       excludeFromSemantics: true,
       onTapDown: _onTapDown,
@@ -420,14 +396,14 @@ class _CupertinoAlertRenderWidget extends RenderObjectWidget {
   RenderObject createRenderObject(BuildContext context) {
     return _RenderCupertinoAlert(
       dividerThickness: _kDividerThickness / MediaQuery.of(context).devicePixelRatio,
-      dividerColor: _kButtonDividerColor,
+      dividerColor: CupertinoDynamicColor.resolve(_kButtonDividerColor, context),
     );
   }
 
   @override
   void updateRenderObject(BuildContext context, _RenderCupertinoAlert renderObject) {
     super.updateRenderObject(context, renderObject);
-    renderObject.dividerColor = _kButtonDividerColor;
+    renderObject.dividerColor = CupertinoDynamicColor.resolve(_kButtonDividerColor, context);
   }
 
   @override
@@ -443,10 +419,10 @@ class _CupertinoAlertRenderElement extends RenderObjectElement {
   Element _actionsElement;
 
   @override
-  _CupertinoAlertRenderWidget get widget => super.widget;
+  _CupertinoAlertRenderWidget get widget => super.widget as _CupertinoAlertRenderWidget;
 
   @override
-  _RenderCupertinoAlert get renderObject => super.renderObject;
+  _RenderCupertinoAlert get renderObject => super.renderObject as _RenderCupertinoAlert;
 
   @override
   void visitChildren(ElementVisitor visitor) {
@@ -494,6 +470,7 @@ class _CupertinoAlertRenderElement extends RenderObjectElement {
     } else if (_actionsElement == child) {
       _actionsElement = null;
     }
+    super.forgetChild(child);
   }
 
   @override
@@ -510,10 +487,10 @@ class _CupertinoAlertRenderElement extends RenderObjectElement {
     assert(slot != null);
     switch (slot) {
       case _AlertSections.contentSection:
-        renderObject.contentSection = child;
+        renderObject.contentSection = child as RenderBox;
         break;
       case _AlertSections.actionsSection:
-        renderObject.actionsSection = child;
+        renderObject.actionsSection = child as RenderBox;
         break;
     }
   }
@@ -692,6 +669,7 @@ class _RenderCupertinoAlert extends RenderBox {
 
   @override
   void performLayout() {
+    final BoxConstraints constraints = this.constraints;
     final bool hasDivider = contentSection.getMaxIntrinsicHeight(constraints.maxWidth) > 0.0
         && actionsSection.getMaxIntrinsicHeight(constraints.maxWidth) > 0.0;
     final double dividerThickness = hasDivider ? _dividerThickness : 0.0;
@@ -721,13 +699,13 @@ class _RenderCupertinoAlert extends RenderBox {
     // Set the position of the actions box to sit at the bottom of the alert.
     // The content box defaults to the top left, which is where we want it.
     assert(actionsSection.parentData is MultiChildLayoutParentData);
-    final MultiChildLayoutParentData actionParentData = actionsSection.parentData;
+    final MultiChildLayoutParentData actionParentData = actionsSection.parentData as MultiChildLayoutParentData;
     actionParentData.offset = Offset(0.0, contentSize.height + dividerThickness);
   }
 
   @override
   void paint(PaintingContext context, Offset offset) {
-    final MultiChildLayoutParentData contentParentData = contentSection.parentData;
+    final MultiChildLayoutParentData contentParentData = contentSection.parentData as MultiChildLayoutParentData;
     contentSection.paint(context, offset + contentParentData.offset);
 
     final bool hasDivider = contentSection.size.height > 0.0 && actionsSection.size.height > 0.0;
@@ -735,7 +713,7 @@ class _RenderCupertinoAlert extends RenderBox {
       _paintDividerBetweenContentAndActions(context.canvas, offset);
     }
 
-    final MultiChildLayoutParentData actionsParentData = actionsSection.parentData;
+    final MultiChildLayoutParentData actionsParentData = actionsSection.parentData as MultiChildLayoutParentData;
     actionsSection.paint(context, offset + actionsParentData.offset);
   }
 
@@ -753,8 +731,8 @@ class _RenderCupertinoAlert extends RenderBox {
 
   @override
   bool hitTestChildren(BoxHitTestResult result, { Offset position }) {
-    final MultiChildLayoutParentData contentSectionParentData = contentSection.parentData;
-    final MultiChildLayoutParentData actionsSectionParentData = actionsSection.parentData;
+    final MultiChildLayoutParentData contentSectionParentData = contentSection.parentData as MultiChildLayoutParentData;
+    final MultiChildLayoutParentData actionsSectionParentData = actionsSection.parentData as MultiChildLayoutParentData;
     return result.addWithPaintOffset(
              offset: contentSectionParentData.offset,
              position: position,
@@ -980,7 +958,7 @@ class _PressableActionButtonState extends State<_PressableActionButton> {
 // _ActionButtonParentData. _ActionButtonParentDataWidget is responsible for
 // updating the pressed state of an _ActionButtonParentData based on the
 // incoming isPressed property.
-class _ActionButtonParentDataWidget extends ParentDataWidget<_CupertinoAlertActionsRenderWidget> {
+class _ActionButtonParentDataWidget extends ParentDataWidget<_ActionButtonParentData> {
   const _ActionButtonParentDataWidget({
     Key key,
     this.isPressed,
@@ -992,7 +970,7 @@ class _ActionButtonParentDataWidget extends ParentDataWidget<_CupertinoAlertActi
   @override
   void applyParentData(RenderObject renderObject) {
     assert(renderObject.parentData is _ActionButtonParentData);
-    final _ActionButtonParentData parentData = renderObject.parentData;
+    final _ActionButtonParentData parentData = renderObject.parentData as _ActionButtonParentData;
     if (parentData.isPressed != isPressed) {
       parentData.isPressed = isPressed;
 
@@ -1002,6 +980,9 @@ class _ActionButtonParentDataWidget extends ParentDataWidget<_CupertinoAlertActi
         targetParent.markNeedsPaint();
     }
   }
+
+  @override
+  Type get debugTypicalAncestorWidgetClass => _CupertinoAlertActionsRenderWidget;
 }
 
 // ParentData applied to individual action buttons that report whether or not
@@ -1034,7 +1015,7 @@ class _CupertinoAlertActionsRenderWidget extends MultiChildRenderObjectWidget {
   RenderObject createRenderObject(BuildContext context) {
     return _RenderCupertinoAlertActions(
       dividerThickness: _dividerThickness,
-      dividerColor: _kButtonDividerColor,
+      dividerColor: CupertinoDynamicColor.resolve(_kButtonDividerColor, context),
       hasCancelButton: _hasCancelButton,
       backgroundColor: CupertinoDynamicColor.resolve(_kBackgroundColor, context),
       pressedColor: CupertinoDynamicColor.resolve(_kPressedColor, context),
@@ -1045,7 +1026,7 @@ class _CupertinoAlertActionsRenderWidget extends MultiChildRenderObjectWidget {
   void updateRenderObject(BuildContext context, _RenderCupertinoAlertActions renderObject) {
     renderObject
       ..dividerThickness = _dividerThickness
-      ..dividerColor = _kButtonDividerColor
+      ..dividerColor = CupertinoDynamicColor.resolve(_kButtonDividerColor, context)
       ..hasCancelButton = _hasCancelButton
       ..backgroundColor = CupertinoDynamicColor.resolve(_kBackgroundColor, context)
       ..pressedColor = CupertinoDynamicColor.resolve(_kPressedColor, context);
@@ -1090,8 +1071,9 @@ class _RenderCupertinoAlertActions extends RenderBox
           ..color = pressedColor,
        _dividerPaint = Paint()
           ..color = dividerColor
-          ..style = PaintingStyle.fill
-       { addAll(children); }
+          ..style = PaintingStyle.fill {
+    addAll(children);
+  }
 
   // The thickness of the divider between buttons.
   double get dividerThickness => _dividerThickness;
@@ -1243,7 +1225,7 @@ class _RenderCupertinoAlertActions extends RenderBox
       );
 
       assert(child.parentData is MultiChildLayoutParentData);
-      final MultiChildLayoutParentData parentData = child.parentData;
+      final MultiChildLayoutParentData parentData = child.parentData as MultiChildLayoutParentData;
       parentData.offset = Offset(0.0, verticalOffset);
 
       verticalOffset += child.size.height;
@@ -1285,14 +1267,13 @@ class _RenderCupertinoAlertActions extends RenderBox
     RenderBox prevChild;
     while (child != null) {
       assert(child.parentData is _ActionButtonParentData);
-      final _ActionButtonParentData currentButtonParentData = child.parentData;
+      final _ActionButtonParentData currentButtonParentData = child.parentData as _ActionButtonParentData;
       final bool isButtonPressed = currentButtonParentData.isPressed;
 
       bool isPrevButtonPressed = false;
       if (prevChild != null) {
         assert(prevChild.parentData is _ActionButtonParentData);
-        final _ActionButtonParentData previousButtonParentData = prevChild
-            .parentData;
+        final _ActionButtonParentData previousButtonParentData = prevChild.parentData as _ActionButtonParentData;
         isPrevButtonPressed = previousButtonParentData.isPressed;
       }
 
@@ -1342,7 +1323,7 @@ class _RenderCupertinoAlertActions extends RenderBox
   void _drawButtons(PaintingContext context, Offset offset) {
     RenderBox child = firstChild;
     while (child != null) {
-      final MultiChildLayoutParentData childParentData = child.parentData;
+      final MultiChildLayoutParentData childParentData = child.parentData as MultiChildLayoutParentData;
       context.paintChild(child, childParentData.offset + offset);
       child = childAfter(child);
     }

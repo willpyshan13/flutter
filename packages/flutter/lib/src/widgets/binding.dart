@@ -1,4 +1,4 @@
-// Copyright 2015 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Flutter Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -31,7 +31,7 @@ export 'dart:ui' show AppLifecycleState, Locale;
 /// handlers must be implemented (and the analyzer will list those that have
 /// been omitted).
 ///
-/// {@tool sample}
+/// {@tool snippet}
 ///
 /// This [StatefulWidget] implements the parts of the [State] and
 /// [WidgetsBindingObserver] protocols necessary to react to application
@@ -109,7 +109,7 @@ abstract class WidgetsBindingObserver {
   ///
   /// This method exposes notifications from [Window.onMetricsChanged].
   ///
-  /// {@tool sample}
+  /// {@tool snippet}
   ///
   /// This [StatefulWidget] implements the parts of the [State] and
   /// [WidgetsBindingObserver] protocols necessary to react when the device is
@@ -124,9 +124,12 @@ abstract class WidgetsBindingObserver {
   /// }
   ///
   /// class _MetricsReactorState extends State<MetricsReactor> with WidgetsBindingObserver {
+  ///   Size _lastSize;
+  ///
   ///   @override
   ///   void initState() {
   ///     super.initState();
+  ///     _lastSize = WidgetsBinding.instance.window.physicalSize;
   ///     WidgetsBinding.instance.addObserver(this);
   ///   }
   ///
@@ -135,8 +138,6 @@ abstract class WidgetsBindingObserver {
   ///     WidgetsBinding.instance.removeObserver(this);
   ///     super.dispose();
   ///   }
-  ///
-  ///   Size _lastSize;
   ///
   ///   @override
   ///   void didChangeMetrics() {
@@ -169,7 +170,7 @@ abstract class WidgetsBindingObserver {
   ///
   /// This method exposes notifications from [Window.onTextScaleFactorChanged].
   ///
-  /// {@tool sample}
+  /// {@tool snippet}
   ///
   /// ```dart
   /// class TextScaleFactorReactor extends StatefulWidget {
@@ -213,7 +214,9 @@ abstract class WidgetsBindingObserver {
   ///    boilerplate.
   void didChangeTextScaleFactor() { }
 
-  /// {@macro on_platform_brightness_change}
+  /// Called when the platform brightness changes.
+  ///
+  /// This method exposes notifications from [Window.onPlatformBrightnessChanged].
   void didChangePlatformBrightness() { }
 
   /// Called when the system tells the app that the user's locale has
@@ -246,11 +249,17 @@ abstract class WidgetsBindingObserver {
 }
 
 /// The glue between the widgets layer and the Flutter engine.
-mixin WidgetsBinding on BindingBase, SchedulerBinding, GestureBinding, RendererBinding, SemanticsBinding {
+mixin WidgetsBinding on BindingBase, ServicesBinding, SchedulerBinding, GestureBinding, RendererBinding, SemanticsBinding {
   @override
   void initInstances() {
     super.initInstances();
     _instance = this;
+
+    assert(() {
+      _debugAddStackFilters();
+      return true;
+    }());
+
     // Initialization of [_buildOwner] has to be done after
     // [super.initInstances] is called, as it requires [ServicesBinding] to
     // properly setup the [defaultBinaryMessenger] instance.
@@ -259,8 +268,88 @@ mixin WidgetsBinding on BindingBase, SchedulerBinding, GestureBinding, RendererB
     window.onLocaleChanged = handleLocaleChanged;
     window.onAccessibilityFeaturesChanged = handleAccessibilityFeaturesChanged;
     SystemChannels.navigation.setMethodCallHandler(_handleNavigationInvocation);
-    SystemChannels.system.setMessageHandler(_handleSystemMessage);
     FlutterErrorDetails.propertiesTransformers.add(transformDebugCreator);
+  }
+
+  void _debugAddStackFilters() {
+    const PartialStackFrame elementInflateWidget = PartialStackFrame(package: 'package:flutter/src/widgets/framework.dart', className: 'Element', method: 'inflateWidget');
+    const PartialStackFrame elementUpdateChild = PartialStackFrame(package: 'package:flutter/src/widgets/framework.dart', className: 'Element', method: 'updateChild');
+    const PartialStackFrame elementRebuild = PartialStackFrame(package: 'package:flutter/src/widgets/framework.dart', className: 'Element', method: 'rebuild');
+    const PartialStackFrame componentElementPerformRebuild = PartialStackFrame(package: 'package:flutter/src/widgets/framework.dart', className: 'ComponentElement', method: 'performRebuild');
+    const PartialStackFrame componentElementFirstBuild = PartialStackFrame(package: 'package:flutter/src/widgets/framework.dart', className: 'ComponentElement', method: '_firstBuild');
+    const PartialStackFrame componentElementMount = PartialStackFrame(package: 'package:flutter/src/widgets/framework.dart', className: 'ComponentElement', method: 'mount');
+    const PartialStackFrame statefulElementFirstBuild = PartialStackFrame(package: 'package:flutter/src/widgets/framework.dart', className: 'StatefulElement', method: '_firstBuild');
+    const PartialStackFrame singleChildMount = PartialStackFrame(package: 'package:flutter/src/widgets/framework.dart', className: 'SingleChildRenderObjectElement', method: 'mount');
+    const PartialStackFrame statefulElementRebuild = PartialStackFrame(package: 'package:flutter/src/widgets/framework.dart', className: 'StatefulElement', method: 'performRebuild');
+
+    const String replacementString = '...     Normal element mounting';
+
+    // ComponentElement variations
+    FlutterError.addDefaultStackFilter(const RepetitiveStackFrameFilter(
+      frames: <PartialStackFrame>[
+        elementInflateWidget,
+        elementUpdateChild,
+        componentElementPerformRebuild,
+        elementRebuild,
+        componentElementFirstBuild,
+        componentElementMount,
+      ],
+      replacement: replacementString,
+    ));
+    FlutterError.addDefaultStackFilter(const RepetitiveStackFrameFilter(
+      frames: <PartialStackFrame>[
+        elementUpdateChild,
+        componentElementPerformRebuild,
+        elementRebuild,
+        componentElementFirstBuild,
+        componentElementMount,
+      ],
+      replacement: replacementString,
+    ));
+
+    // StatefulElement variations
+    FlutterError.addDefaultStackFilter(const RepetitiveStackFrameFilter(
+      frames: <PartialStackFrame>[
+        elementInflateWidget,
+        elementUpdateChild,
+        componentElementPerformRebuild,
+        statefulElementRebuild,
+        elementRebuild,
+        componentElementFirstBuild,
+        statefulElementFirstBuild,
+        componentElementMount,
+      ],
+      replacement: replacementString,
+    ));
+    FlutterError.addDefaultStackFilter(const RepetitiveStackFrameFilter(
+      frames: <PartialStackFrame>[
+        elementUpdateChild,
+        componentElementPerformRebuild,
+        statefulElementRebuild,
+        elementRebuild,
+        componentElementFirstBuild,
+        statefulElementFirstBuild,
+        componentElementMount,
+      ],
+      replacement: replacementString,
+    ));
+
+    // SingleChildRenderObjectElement variations
+    FlutterError.addDefaultStackFilter(const RepetitiveStackFrameFilter(
+      frames: <PartialStackFrame>[
+        elementInflateWidget,
+        elementUpdateChild,
+        singleChildMount,
+      ],
+      replacement: replacementString,
+    ));
+    FlutterError.addDefaultStackFilter(const RepetitiveStackFrameFilter(
+      frames: <PartialStackFrame>[
+        elementUpdateChild,
+        singleChildMount,
+      ],
+      replacement: replacementString,
+    ));
   }
 
   /// The current [WidgetsBinding], if one has been created.
@@ -284,17 +373,19 @@ mixin WidgetsBinding on BindingBase, SchedulerBinding, GestureBinding, RendererB
         },
       );
 
-      registerBoolServiceExtension(
-        name: 'showPerformanceOverlay',
-        getter: () =>
-        Future<bool>.value(WidgetsApp.showPerformanceOverlayOverride),
-        setter: (bool value) {
-          if (WidgetsApp.showPerformanceOverlayOverride == value)
-            return Future<void>.value();
-          WidgetsApp.showPerformanceOverlayOverride = value;
-          return _forceRebuild();
-        },
-      );
+      if (!kIsWeb) {
+        registerBoolServiceExtension(
+          name: 'showPerformanceOverlay',
+          getter: () =>
+          Future<bool>.value(WidgetsApp.showPerformanceOverlayOverride),
+          setter: (bool value) {
+            if (WidgetsApp.showPerformanceOverlayOverride == value)
+              return Future<void>.value();
+            WidgetsApp.showPerformanceOverlayOverride = value;
+            return _forceRebuild();
+          },
+        );
+      }
 
       registerServiceExtension(
         name: 'didSendFirstFrameEvent',
@@ -319,6 +410,27 @@ mixin WidgetsBinding on BindingBase, SchedulerBinding, GestureBinding, RendererB
             // on it returning a string and not a boolean.
             'enabled': firstFrameRasterized ? 'true' : 'false',
           };
+        },
+      );
+
+      // Register the ability to quickly mark elements as dirty.
+      // The performance of this method may be improved with additional
+      // information from https://github.com/flutter/flutter/issues/46195.
+      registerServiceExtension(
+        name: 'fastReassemble',
+        callback: (Map<String, Object> params) async {
+          final String className = params['class'] as String;
+          void markElementsDirty(Element element) {
+            if (element == null) {
+              return;
+            }
+            if (element.widget?.runtimeType?.toString()?.startsWith(className) ?? false) {
+              element.markNeedsBuild();
+            }
+            element.visitChildElements(markElementsDirty);
+          }
+          markElementsDirty(renderViewElement);
+          return <String, String>{'Success': 'true'};
         },
       );
 
@@ -422,28 +534,28 @@ mixin WidgetsBinding on BindingBase, SchedulerBinding, GestureBinding, RendererB
   @override
   void handleMetricsChanged() {
     super.handleMetricsChanged();
-    for (WidgetsBindingObserver observer in _observers)
+    for (final WidgetsBindingObserver observer in _observers)
       observer.didChangeMetrics();
   }
 
   @override
   void handleTextScaleFactorChanged() {
     super.handleTextScaleFactorChanged();
-    for (WidgetsBindingObserver observer in _observers)
+    for (final WidgetsBindingObserver observer in _observers)
       observer.didChangeTextScaleFactor();
   }
 
   @override
   void handlePlatformBrightnessChanged() {
     super.handlePlatformBrightnessChanged();
-    for (WidgetsBindingObserver observer in _observers)
+    for (final WidgetsBindingObserver observer in _observers)
       observer.didChangePlatformBrightness();
   }
 
   @override
   void handleAccessibilityFeaturesChanged() {
     super.handleAccessibilityFeaturesChanged();
-    for (WidgetsBindingObserver observer in _observers)
+    for (final WidgetsBindingObserver observer in _observers)
       observer.didChangeAccessibilityFeatures();
   }
 
@@ -467,7 +579,7 @@ mixin WidgetsBinding on BindingBase, SchedulerBinding, GestureBinding, RendererB
   @protected
   @mustCallSuper
   void dispatchLocalesChanged(List<Locale> locales) {
-    for (WidgetsBindingObserver observer in _observers)
+    for (final WidgetsBindingObserver observer in _observers)
       observer.didChangeLocales(locales);
   }
 
@@ -480,7 +592,7 @@ mixin WidgetsBinding on BindingBase, SchedulerBinding, GestureBinding, RendererB
   @protected
   @mustCallSuper
   void dispatchAccessibilityFeaturesChanged() {
-    for (WidgetsBindingObserver observer in _observers)
+    for (final WidgetsBindingObserver observer in _observers)
       observer.didChangeAccessibilityFeatures();
   }
 
@@ -500,7 +612,7 @@ mixin WidgetsBinding on BindingBase, SchedulerBinding, GestureBinding, RendererB
   /// [SystemChannels.navigation].
   @protected
   Future<void> handlePopRoute() async {
-    for (WidgetsBindingObserver observer in List<WidgetsBindingObserver>.from(_observers)) {
+    for (final WidgetsBindingObserver observer in List<WidgetsBindingObserver>.from(_observers)) {
       if (await observer.didPopRoute())
         return;
     }
@@ -520,7 +632,7 @@ mixin WidgetsBinding on BindingBase, SchedulerBinding, GestureBinding, RendererB
   @protected
   @mustCallSuper
   Future<void> handlePushRoute(String route) async {
-    for (WidgetsBindingObserver observer in List<WidgetsBindingObserver>.from(_observers)) {
+    for (final WidgetsBindingObserver observer in List<WidgetsBindingObserver>.from(_observers)) {
       if (await observer.didPushRoute(route))
         return;
     }
@@ -531,7 +643,7 @@ mixin WidgetsBinding on BindingBase, SchedulerBinding, GestureBinding, RendererB
       case 'popRoute':
         return handlePopRoute();
       case 'pushRoute':
-        return handlePushRoute(methodCall.arguments);
+        return handlePushRoute(methodCall.arguments as String);
     }
     return Future<dynamic>.value();
   }
@@ -539,7 +651,7 @@ mixin WidgetsBinding on BindingBase, SchedulerBinding, GestureBinding, RendererB
   @override
   void handleAppLifecycleStateChanged(AppLifecycleState state) {
     super.handleAppLifecycleStateChanged(state);
-    for (WidgetsBindingObserver observer in _observers)
+    for (final WidgetsBindingObserver observer in _observers)
       observer.didChangeAppLifecycleState(state);
   }
 
@@ -552,13 +664,15 @@ mixin WidgetsBinding on BindingBase, SchedulerBinding, GestureBinding, RendererB
   /// This method exposes the `memoryPressure` notification from
   /// [SystemChannels.system].
   void handleMemoryPressure() {
-    for (WidgetsBindingObserver observer in _observers)
+    for (final WidgetsBindingObserver observer in _observers)
       observer.didHaveMemoryPressure();
   }
 
-  Future<void> _handleSystemMessage(Object systemMessage) async {
-    final Map<String, dynamic> message = systemMessage;
-    final String type = message['type'];
+  @override
+  Future<void> handleSystemMessage(Object systemMessage) async {
+    await super.handleSystemMessage(systemMessage);
+    final Map<String, dynamic> message = systemMessage as Map<String, dynamic>;
+    final String type = message['type'] as String;
     switch (type) {
       case 'memoryPressure':
         handleMemoryPressure();
@@ -568,9 +682,6 @@ mixin WidgetsBinding on BindingBase, SchedulerBinding, GestureBinding, RendererB
   }
 
   bool _needToReportFirstFrame = true;
-  int _deferFirstFrameReportCount = 0;
-  bool get _reportFirstFrame => _deferFirstFrameReportCount == 0;
-
 
   final Completer<void> _firstFrameCompleter = Completer<void>();
 
@@ -596,11 +707,6 @@ mixin WidgetsBinding on BindingBase, SchedulerBinding, GestureBinding, RendererB
 
   /// Whether the first frame has finished building.
   ///
-  /// Only useful in profile and debug builds; in release builds, this always
-  /// return false. This can be deferred using [deferFirstFrameReport] and
-  /// [allowFirstFrameReport]. The value is set at the end of the call to
-  /// [drawFrame].
-  ///
   /// This value can also be obtained over the VM service protocol as
   /// `ext.flutter.didSendFirstFrameEvent`.
   ///
@@ -612,27 +718,30 @@ mixin WidgetsBinding on BindingBase, SchedulerBinding, GestureBinding, RendererB
   /// Tell the framework not to report the frame it is building as a "useful"
   /// first frame until there is a corresponding call to [allowFirstFrameReport].
   ///
-  /// This is used by [WidgetsApp] to avoid reporting frames that aren't useful
-  /// during startup as the "first frame".
+  /// Deprecated. Use [deferFirstFrame]/[allowFirstFrame] to delay rendering the
+  /// first frame.
+  @Deprecated(
+    'Use deferFirstFrame/allowFirstFrame to delay rendering the first frame. '
+    'This feature was deprecated after v1.12.4.'
+  )
   void deferFirstFrameReport() {
     if (!kReleaseMode) {
-      assert(_deferFirstFrameReportCount >= 0);
-      _deferFirstFrameReportCount += 1;
+      deferFirstFrame();
     }
   }
 
   /// When called after [deferFirstFrameReport]: tell the framework to report
   /// the frame it is building as a "useful" first frame.
   ///
-  /// This method may only be called once for each corresponding call
-  /// to [deferFirstFrameReport].
-  ///
-  /// This is used by [WidgetsApp] to report when the first useful frame is
-  /// painted.
+  /// Deprecated. Use [deferFirstFrame]/[allowFirstFrame] to delay rendering the
+  /// first frame.
+  @Deprecated(
+    'Use deferFirstFrame/allowFirstFrame to delay rendering the first frame. '
+    'This feature was deprecated after v1.12.4.'
+  )
   void allowFirstFrameReport() {
     if (!kReleaseMode) {
-      assert(_deferFirstFrameReportCount >= 1);
-      _deferFirstFrameReportCount -= 1;
+      allowFirstFrame();
     }
   }
 
@@ -641,23 +750,27 @@ mixin WidgetsBinding on BindingBase, SchedulerBinding, GestureBinding, RendererB
     // should not trigger a new frame.
     assert(() {
       if (debugBuildingDirtyElements) {
-        throw FlutterError(
-          'Build scheduled during frame.\n'
-          'While the widget tree was being built, laid out, and painted, '
-          'a new frame was scheduled to rebuild the widget tree. '
-          'This might be because setState() was called from a layout or '
-          'paint callback. '
-          'If a change is needed to the widget tree, it should be applied '
-          'as the tree is being built. Scheduling a change for the subsequent '
-          'frame instead results in an interface that lags behind by one frame. '
-          'If this was done to make your build dependent on a size measured at '
-          'layout time, consider using a LayoutBuilder, CustomSingleChildLayout, '
-          'or CustomMultiChildLayout. If, on the other hand, the one frame delay '
-          'is the desired effect, for example because this is an '
-          'animation, consider scheduling the frame in a post-frame callback '
-          'using SchedulerBinding.addPostFrameCallback or '
-          'using an AnimationController to trigger the animation.'
-        );
+        throw FlutterError.fromParts(<DiagnosticsNode>[
+          ErrorSummary('Build scheduled during frame.'),
+          ErrorDescription(
+            'While the widget tree was being built, laid out, and painted, '
+            'a new frame was scheduled to rebuild the widget tree.'
+          ),
+          ErrorHint(
+            'This might be because setState() was called from a layout or '
+            'paint callback. '
+            'If a change is needed to the widget tree, it should be applied '
+            'as the tree is being built. Scheduling a change for the subsequent '
+            'frame instead results in an interface that lags behind by one frame. '
+            'If this was done to make your build dependent on a size measured at '
+            'layout time, consider using a LayoutBuilder, CustomSingleChildLayout, '
+            'or CustomMultiChildLayout. If, on the other hand, the one frame delay '
+            'is the desired effect, for example because this is an '
+            'animation, consider scheduling the frame in a post-frame callback '
+            'using SchedulerBinding.addPostFrameCallback or '
+            'using an AnimationController to trigger the animation.',
+          )
+        ]);
       }
       return true;
     }());
@@ -676,7 +789,7 @@ mixin WidgetsBinding on BindingBase, SchedulerBinding, GestureBinding, RendererB
   /// Pump the build and rendering pipeline to generate a frame.
   ///
   /// This method is called by [handleDrawFrame], which itself is called
-  /// automatically by the engine when when it is time to lay out and paint a
+  /// automatically by the engine when it is time to lay out and paint a
   /// frame.
   ///
   /// Each frame consists of the following phases:
@@ -745,27 +858,24 @@ mixin WidgetsBinding on BindingBase, SchedulerBinding, GestureBinding, RendererB
       return true;
     }());
 
-    if (_needToReportFirstFrame && _reportFirstFrame) {
+    TimingsCallback firstFrameCallback;
+    if (_needToReportFirstFrame) {
       assert(!_firstFrameCompleter.isCompleted);
-      // TODO(liyuqian): use a broadcast stream approach
-      // use frameTimings. https://github.com/flutter/flutter/issues/38838
-      // ignore: deprecated_member_use
-      final TimingsCallback oldCallback = WidgetsBinding.instance.window.onReportTimings;
-      // use frameTimings. https://github.com/flutter/flutter/issues/38838
-      // ignore: deprecated_member_use
-      WidgetsBinding.instance.window.onReportTimings = (List<FrameTiming> timings) {
+
+      firstFrameCallback = (List<FrameTiming> timings) {
+        assert(sendFramesToEngine);
         if (!kReleaseMode) {
           developer.Timeline.instantSync('Rasterized first useful frame');
           developer.postEvent('Flutter.FirstFrame', <String, dynamic>{});
         }
-        if (oldCallback != null) {
-          oldCallback(timings);
-        }
-        // use frameTimings. https://github.com/flutter/flutter/issues/38838
-        // ignore: deprecated_member_use
-        WidgetsBinding.instance.window.onReportTimings = oldCallback;
+        SchedulerBinding.instance.removeTimingsCallback(firstFrameCallback);
+        firstFrameCallback = null;
         _firstFrameCompleter.complete();
       };
+      // Callback is only invoked when [Window.render] is called. When
+      // [sendFramesToEngine] is set to false during the frame, it will not
+      // be called and we need to remove the callback (see below).
+      SchedulerBinding.instance.addTimingsCallback(firstFrameCallback);
     }
 
     try {
@@ -780,11 +890,14 @@ mixin WidgetsBinding on BindingBase, SchedulerBinding, GestureBinding, RendererB
       }());
     }
     if (!kReleaseMode) {
-      if (_needToReportFirstFrame && _reportFirstFrame) {
+      if (_needToReportFirstFrame && sendFramesToEngine) {
         developer.Timeline.instantSync('Widgets built first useful frame');
       }
     }
     _needToReportFirstFrame = false;
+    if (firstFrameCallback != null && !sendFramesToEngine) {
+      SchedulerBinding.instance.removeTimingsCallback(firstFrameCallback);
+    }
   }
 
   /// The [Element] that is at the root of the hierarchy (and which wraps the
@@ -794,18 +907,38 @@ mixin WidgetsBinding on BindingBase, SchedulerBinding, GestureBinding, RendererB
   Element get renderViewElement => _renderViewElement;
   Element _renderViewElement;
 
+  bool _readyToProduceFrames = false;
+
+  @override
+  bool get framesEnabled => super.framesEnabled && _readyToProduceFrames;
+
+  /// Schedules a [Timer] for attaching the root widget.
+  ///
+  /// This is called by [runApp] to configure the widget tree. Consider using
+  /// [attachRootWidget] if you want to build the widget tree synchronously.
+  @protected
+  void scheduleAttachRootWidget(Widget rootWidget) {
+    Timer.run(() {
+      attachRootWidget(rootWidget);
+    });
+  }
+
   /// Takes a widget and attaches it to the [renderViewElement], creating it if
   /// necessary.
   ///
   /// This is called by [runApp] to configure the widget tree.
   ///
-  /// See also [RenderObjectToWidgetAdapter.attachToRenderTree].
+  /// See also:
+  ///
+  ///  * [RenderObjectToWidgetAdapter.attachToRenderTree], which inflates a
+  ///    widget and attaches it to the render tree.
   void attachRootWidget(Widget rootWidget) {
+    _readyToProduceFrames = true;
     _renderViewElement = RenderObjectToWidgetAdapter<RenderBox>(
       container: renderView,
       debugShortDescription: '[root]',
       child: rootWidget,
-    ).attachToRenderTree(buildOwner, renderViewElement);
+    ).attachToRenderTree(buildOwner, renderViewElement as RenderObjectToWidgetElement<RenderBox>);
   }
 
   /// Whether the [renderViewElement] has been initialized.
@@ -821,12 +954,9 @@ mixin WidgetsBinding on BindingBase, SchedulerBinding, GestureBinding, RendererB
       return true;
     }());
 
-    deferFirstFrameReport();
     if (renderViewElement != null)
       buildOwner.reassemble(renderViewElement);
-    return super.performReassemble().then((void value) {
-      allowFirstFrameReport();
-    });
+    return super.performReassemble();
   }
 }
 
@@ -855,7 +985,7 @@ mixin WidgetsBinding on BindingBase, SchedulerBinding, GestureBinding, RendererB
 ///    ensure the widget, element, and render trees are all built.
 void runApp(Widget app) {
   WidgetsFlutterBinding.ensureInitialized()
-    ..attachRootWidget(app)
+    ..scheduleAttachRootWidget(app)
     ..scheduleWarmUpFrame();
 }
 
@@ -863,7 +993,10 @@ void runApp(Widget app) {
 void debugDumpApp() {
   assert(WidgetsBinding.instance != null);
   String mode = 'RELEASE MODE';
-  assert(() { mode = 'CHECKED MODE'; return true; }());
+  assert(() {
+    mode = 'CHECKED MODE';
+    return true;
+  }());
   debugPrint('${WidgetsBinding.instance.runtimeType} - $mode');
   if (WidgetsBinding.instance.renderViewElement != null) {
     debugPrint(WidgetsBinding.instance.renderViewElement.toStringDeep());
@@ -927,6 +1060,9 @@ class RenderObjectToWidgetAdapter<T extends RenderObject> extends RenderObjectWi
       owner.buildScope(element, () {
         element.mount(null, null);
       });
+      // This is most likely the first time the framework is ready to produce
+      // a frame. Ensure that we are asked for one.
+      SchedulerBinding.instance.ensureVisualUpdate();
     } else {
       element._newWidget = this;
       element.markNeedsBuild();
@@ -957,7 +1093,7 @@ class RenderObjectToWidgetElement<T extends RenderObject> extends RootRenderObje
   RenderObjectToWidgetElement(RenderObjectToWidgetAdapter<T> widget) : super(widget);
 
   @override
-  RenderObjectToWidgetAdapter<T> get widget => super.widget;
+  RenderObjectToWidgetAdapter<T> get widget => super.widget as RenderObjectToWidgetAdapter<T>;
 
   Element _child;
 
@@ -973,6 +1109,7 @@ class RenderObjectToWidgetElement<T extends RenderObject> extends RootRenderObje
   void forgetChild(Element child) {
     assert(child == _child);
     _child = null;
+    super.forgetChild(child);
   }
 
   @override
@@ -1000,7 +1137,7 @@ class RenderObjectToWidgetElement<T extends RenderObject> extends RootRenderObje
       // due to a reassemble.
       final Widget newWidget = _newWidget;
       _newWidget = null;
-      update(newWidget);
+      update(newWidget as RenderObjectToWidgetAdapter<T>);
     }
     super.performRebuild();
     assert(_newWidget == null);
@@ -1024,13 +1161,13 @@ class RenderObjectToWidgetElement<T extends RenderObject> extends RootRenderObje
   }
 
   @override
-  RenderObjectWithChildMixin<T> get renderObject => super.renderObject;
+  RenderObjectWithChildMixin<T> get renderObject => super.renderObject as RenderObjectWithChildMixin<T>;
 
   @override
   void insertChildRenderObject(RenderObject child, dynamic slot) {
     assert(slot == _rootChildSlot);
     assert(renderObject.debugValidateChild(child));
-    renderObject.child = child;
+    renderObject.child = child as T;
   }
 
   @override

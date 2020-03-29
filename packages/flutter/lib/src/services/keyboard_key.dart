@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Flutter Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -19,7 +19,7 @@ import 'package:flutter/foundation.dart';
 ///    that are returned from [RawKeyEvent.physicalKey].
 ///  * [LogicalKeyboardKey], a class with static values that describe the keys
 ///    that are returned from [RawKeyEvent.logicalKey].
-abstract class KeyboardKey extends Diagnosticable {
+abstract class KeyboardKey with Diagnosticable {
   /// A const constructor so that subclasses may be const.
   const KeyboardKey();
 }
@@ -45,7 +45,7 @@ abstract class KeyboardKey extends Diagnosticable {
 /// look at the physical key to make sure that regardless of the character the
 /// key produces, you got the key that is in that location on the keyboard.
 ///
-/// {@tool snippet --template=stateful_widget_scaffold}
+/// {@tool dartpad --template=stateful_widget_scaffold}
 /// This example shows how to detect if the user has selected the logical "Q"
 /// key.
 ///
@@ -91,7 +91,7 @@ abstract class KeyboardKey extends Diagnosticable {
 ///     color: Colors.white,
 ///     alignment: Alignment.center,
 ///     child: DefaultTextStyle(
-///       style: textTheme.display1,
+///       style: textTheme.headline4,
 ///       child: RawKeyboardListener(
 ///         focusNode: _focusNode,
 ///         onKey: _handleKeyEvent,
@@ -127,7 +127,7 @@ class LogicalKeyboardKey extends KeyboardKey {
   ///
   /// [keyId] must not be null.
   ///
-  /// {@tool sample}
+  /// {@tool snippet}
   /// To save executable size, it is recommended that the [debugName] be null in
   /// release mode. You can do this by using the [kReleaseMode] constant.
   ///
@@ -167,12 +167,12 @@ class LogicalKeyboardKey extends KeyboardKey {
   int get hashCode => keyId.hashCode;
 
   @override
-  bool operator ==(dynamic other) {
+  bool operator ==(Object other) {
     if (other.runtimeType != runtimeType) {
       return false;
     }
-    final LogicalKeyboardKey typedOther = other;
-    return keyId == typedOther.keyId;
+    return other is LogicalKeyboardKey
+        && other.keyId == keyId;
   }
 
   /// Returns the [LogicalKeyboardKey] constant that matches the given ID, or
@@ -238,6 +238,21 @@ class LogicalKeyboardKey extends KeyboardKey {
     return result == null ? <LogicalKeyboardKey>{} : <LogicalKeyboardKey>{result};
   }
 
+  /// Takes a set of keys, and returns the same set, but with any keys that have
+  /// synonyms replaced.
+  ///
+  /// It is used, for example, to make sets of keys with members like
+  /// [controlRight] and [controlLeft] and convert that set to contain just
+  /// [control], so that the question "is any control key down?" can be asked.
+  static Set<LogicalKeyboardKey> collapseSynonyms(Set<LogicalKeyboardKey> input) {
+    final Set<LogicalKeyboardKey> result = <LogicalKeyboardKey>{};
+    for (final LogicalKeyboardKey key in input) {
+      final LogicalKeyboardKey synonym = _synonyms[key];
+      result.add(synonym ?? key);
+    }
+    return result;
+  }
+
   @override
   void debugFillProperties(DiagnosticPropertiesBuilder properties) {
     super.debugFillProperties(properties);
@@ -300,11 +315,6 @@ class LogicalKeyboardKey extends KeyboardKey {
   /// See the function [RawKeyEvent.logicalKey] for more information.
   static const LogicalKeyboardKey superKey = LogicalKeyboardKey(0x00100000011, debugName: kReleaseMode ? null : 'Super Key');
 
-  /// Represents the logical "Fn" key on the keyboard.
-  ///
-  /// See the function [RawKeyEvent.logicalKey] for more information.
-  static const LogicalKeyboardKey fn = LogicalKeyboardKey(0x00100000012, debugName: kReleaseMode ? null : 'Fn');
-
   /// Represents the logical "Fn Lock" key on the keyboard.
   ///
   /// See the function [RawKeyEvent.logicalKey] for more information.
@@ -324,6 +334,11 @@ class LogicalKeyboardKey extends KeyboardKey {
   ///
   /// See the function [RawKeyEvent.logicalKey] for more information.
   static const LogicalKeyboardKey turbo = LogicalKeyboardKey(0x00100000016, debugName: kReleaseMode ? null : 'Turbo');
+
+  /// Represents the logical "Privacy Screen Toggle" key on the keyboard.
+  ///
+  /// See the function [RawKeyEvent.logicalKey] for more information.
+  static const LogicalKeyboardKey privacyScreenToggle = LogicalKeyboardKey(0x00100000017, debugName: kReleaseMode ? null : 'Privacy Screen Toggle');
 
   /// Represents the logical "Sleep" key on the keyboard.
   ///
@@ -1210,6 +1225,11 @@ class LogicalKeyboardKey extends KeyboardKey {
   /// See the function [RawKeyEvent.logicalKey] for more information.
   static const LogicalKeyboardKey mediaPlay = LogicalKeyboardKey(0x001000c00b0, debugName: kReleaseMode ? null : 'Media Play');
 
+  /// Represents the logical "Media Pause" key on the keyboard.
+  ///
+  /// See the function [RawKeyEvent.logicalKey] for more information.
+  static const LogicalKeyboardKey mediaPause = LogicalKeyboardKey(0x001000c00b1, debugName: kReleaseMode ? null : 'Media Pause');
+
   /// Represents the logical "Media Record" key on the keyboard.
   ///
   /// See the function [RawKeyEvent.logicalKey] for more information.
@@ -1458,157 +1478,162 @@ class LogicalKeyboardKey extends KeyboardKey {
   /// Represents the logical "Game Button 1" key on the keyboard.
   ///
   /// See the function [RawKeyEvent.logicalKey] for more information.
-  static const LogicalKeyboardKey gameButton1 = LogicalKeyboardKey(0x00100053701, debugName: kReleaseMode ? null : 'Game Button 1');
+  static const LogicalKeyboardKey gameButton1 = LogicalKeyboardKey(0x0010005ff01, debugName: kReleaseMode ? null : 'Game Button 1');
 
   /// Represents the logical "Game Button 2" key on the keyboard.
   ///
   /// See the function [RawKeyEvent.logicalKey] for more information.
-  static const LogicalKeyboardKey gameButton2 = LogicalKeyboardKey(0x00100053702, debugName: kReleaseMode ? null : 'Game Button 2');
+  static const LogicalKeyboardKey gameButton2 = LogicalKeyboardKey(0x0010005ff02, debugName: kReleaseMode ? null : 'Game Button 2');
 
   /// Represents the logical "Game Button 3" key on the keyboard.
   ///
   /// See the function [RawKeyEvent.logicalKey] for more information.
-  static const LogicalKeyboardKey gameButton3 = LogicalKeyboardKey(0x00100053703, debugName: kReleaseMode ? null : 'Game Button 3');
+  static const LogicalKeyboardKey gameButton3 = LogicalKeyboardKey(0x0010005ff03, debugName: kReleaseMode ? null : 'Game Button 3');
 
   /// Represents the logical "Game Button 4" key on the keyboard.
   ///
   /// See the function [RawKeyEvent.logicalKey] for more information.
-  static const LogicalKeyboardKey gameButton4 = LogicalKeyboardKey(0x00100053704, debugName: kReleaseMode ? null : 'Game Button 4');
+  static const LogicalKeyboardKey gameButton4 = LogicalKeyboardKey(0x0010005ff04, debugName: kReleaseMode ? null : 'Game Button 4');
 
   /// Represents the logical "Game Button 5" key on the keyboard.
   ///
   /// See the function [RawKeyEvent.logicalKey] for more information.
-  static const LogicalKeyboardKey gameButton5 = LogicalKeyboardKey(0x00100053705, debugName: kReleaseMode ? null : 'Game Button 5');
+  static const LogicalKeyboardKey gameButton5 = LogicalKeyboardKey(0x0010005ff05, debugName: kReleaseMode ? null : 'Game Button 5');
 
   /// Represents the logical "Game Button 6" key on the keyboard.
   ///
   /// See the function [RawKeyEvent.logicalKey] for more information.
-  static const LogicalKeyboardKey gameButton6 = LogicalKeyboardKey(0x00100053706, debugName: kReleaseMode ? null : 'Game Button 6');
+  static const LogicalKeyboardKey gameButton6 = LogicalKeyboardKey(0x0010005ff06, debugName: kReleaseMode ? null : 'Game Button 6');
 
   /// Represents the logical "Game Button 7" key on the keyboard.
   ///
   /// See the function [RawKeyEvent.logicalKey] for more information.
-  static const LogicalKeyboardKey gameButton7 = LogicalKeyboardKey(0x00100053707, debugName: kReleaseMode ? null : 'Game Button 7');
+  static const LogicalKeyboardKey gameButton7 = LogicalKeyboardKey(0x0010005ff07, debugName: kReleaseMode ? null : 'Game Button 7');
 
   /// Represents the logical "Game Button 8" key on the keyboard.
   ///
   /// See the function [RawKeyEvent.logicalKey] for more information.
-  static const LogicalKeyboardKey gameButton8 = LogicalKeyboardKey(0x00100053708, debugName: kReleaseMode ? null : 'Game Button 8');
+  static const LogicalKeyboardKey gameButton8 = LogicalKeyboardKey(0x0010005ff08, debugName: kReleaseMode ? null : 'Game Button 8');
 
   /// Represents the logical "Game Button 9" key on the keyboard.
   ///
   /// See the function [RawKeyEvent.logicalKey] for more information.
-  static const LogicalKeyboardKey gameButton9 = LogicalKeyboardKey(0x00100053709, debugName: kReleaseMode ? null : 'Game Button 9');
+  static const LogicalKeyboardKey gameButton9 = LogicalKeyboardKey(0x0010005ff09, debugName: kReleaseMode ? null : 'Game Button 9');
 
   /// Represents the logical "Game Button 10" key on the keyboard.
   ///
   /// See the function [RawKeyEvent.logicalKey] for more information.
-  static const LogicalKeyboardKey gameButton10 = LogicalKeyboardKey(0x0010005370a, debugName: kReleaseMode ? null : 'Game Button 10');
+  static const LogicalKeyboardKey gameButton10 = LogicalKeyboardKey(0x0010005ff0a, debugName: kReleaseMode ? null : 'Game Button 10');
 
   /// Represents the logical "Game Button 11" key on the keyboard.
   ///
   /// See the function [RawKeyEvent.logicalKey] for more information.
-  static const LogicalKeyboardKey gameButton11 = LogicalKeyboardKey(0x0010005370b, debugName: kReleaseMode ? null : 'Game Button 11');
+  static const LogicalKeyboardKey gameButton11 = LogicalKeyboardKey(0x0010005ff0b, debugName: kReleaseMode ? null : 'Game Button 11');
 
   /// Represents the logical "Game Button 12" key on the keyboard.
   ///
   /// See the function [RawKeyEvent.logicalKey] for more information.
-  static const LogicalKeyboardKey gameButton12 = LogicalKeyboardKey(0x0010005370c, debugName: kReleaseMode ? null : 'Game Button 12');
+  static const LogicalKeyboardKey gameButton12 = LogicalKeyboardKey(0x0010005ff0c, debugName: kReleaseMode ? null : 'Game Button 12');
 
   /// Represents the logical "Game Button 13" key on the keyboard.
   ///
   /// See the function [RawKeyEvent.logicalKey] for more information.
-  static const LogicalKeyboardKey gameButton13 = LogicalKeyboardKey(0x0010005370d, debugName: kReleaseMode ? null : 'Game Button 13');
+  static const LogicalKeyboardKey gameButton13 = LogicalKeyboardKey(0x0010005ff0d, debugName: kReleaseMode ? null : 'Game Button 13');
 
   /// Represents the logical "Game Button 14" key on the keyboard.
   ///
   /// See the function [RawKeyEvent.logicalKey] for more information.
-  static const LogicalKeyboardKey gameButton14 = LogicalKeyboardKey(0x0010005370e, debugName: kReleaseMode ? null : 'Game Button 14');
+  static const LogicalKeyboardKey gameButton14 = LogicalKeyboardKey(0x0010005ff0e, debugName: kReleaseMode ? null : 'Game Button 14');
 
   /// Represents the logical "Game Button 15" key on the keyboard.
   ///
   /// See the function [RawKeyEvent.logicalKey] for more information.
-  static const LogicalKeyboardKey gameButton15 = LogicalKeyboardKey(0x0010005370f, debugName: kReleaseMode ? null : 'Game Button 15');
+  static const LogicalKeyboardKey gameButton15 = LogicalKeyboardKey(0x0010005ff0f, debugName: kReleaseMode ? null : 'Game Button 15');
 
   /// Represents the logical "Game Button 16" key on the keyboard.
   ///
   /// See the function [RawKeyEvent.logicalKey] for more information.
-  static const LogicalKeyboardKey gameButton16 = LogicalKeyboardKey(0x00100053710, debugName: kReleaseMode ? null : 'Game Button 16');
+  static const LogicalKeyboardKey gameButton16 = LogicalKeyboardKey(0x0010005ff10, debugName: kReleaseMode ? null : 'Game Button 16');
 
   /// Represents the logical "Game Button A" key on the keyboard.
   ///
   /// See the function [RawKeyEvent.logicalKey] for more information.
-  static const LogicalKeyboardKey gameButtonA = LogicalKeyboardKey(0x00100053711, debugName: kReleaseMode ? null : 'Game Button A');
+  static const LogicalKeyboardKey gameButtonA = LogicalKeyboardKey(0x0010005ff11, debugName: kReleaseMode ? null : 'Game Button A');
 
   /// Represents the logical "Game Button B" key on the keyboard.
   ///
   /// See the function [RawKeyEvent.logicalKey] for more information.
-  static const LogicalKeyboardKey gameButtonB = LogicalKeyboardKey(0x00100053712, debugName: kReleaseMode ? null : 'Game Button B');
+  static const LogicalKeyboardKey gameButtonB = LogicalKeyboardKey(0x0010005ff12, debugName: kReleaseMode ? null : 'Game Button B');
 
   /// Represents the logical "Game Button C" key on the keyboard.
   ///
   /// See the function [RawKeyEvent.logicalKey] for more information.
-  static const LogicalKeyboardKey gameButtonC = LogicalKeyboardKey(0x00100053713, debugName: kReleaseMode ? null : 'Game Button C');
+  static const LogicalKeyboardKey gameButtonC = LogicalKeyboardKey(0x0010005ff13, debugName: kReleaseMode ? null : 'Game Button C');
 
   /// Represents the logical "Game Button Left 1" key on the keyboard.
   ///
   /// See the function [RawKeyEvent.logicalKey] for more information.
-  static const LogicalKeyboardKey gameButtonLeft1 = LogicalKeyboardKey(0x00100053714, debugName: kReleaseMode ? null : 'Game Button Left 1');
+  static const LogicalKeyboardKey gameButtonLeft1 = LogicalKeyboardKey(0x0010005ff14, debugName: kReleaseMode ? null : 'Game Button Left 1');
 
   /// Represents the logical "Game Button Left 2" key on the keyboard.
   ///
   /// See the function [RawKeyEvent.logicalKey] for more information.
-  static const LogicalKeyboardKey gameButtonLeft2 = LogicalKeyboardKey(0x00100053715, debugName: kReleaseMode ? null : 'Game Button Left 2');
+  static const LogicalKeyboardKey gameButtonLeft2 = LogicalKeyboardKey(0x0010005ff15, debugName: kReleaseMode ? null : 'Game Button Left 2');
 
   /// Represents the logical "Game Button Mode" key on the keyboard.
   ///
   /// See the function [RawKeyEvent.logicalKey] for more information.
-  static const LogicalKeyboardKey gameButtonMode = LogicalKeyboardKey(0x00100053716, debugName: kReleaseMode ? null : 'Game Button Mode');
+  static const LogicalKeyboardKey gameButtonMode = LogicalKeyboardKey(0x0010005ff16, debugName: kReleaseMode ? null : 'Game Button Mode');
 
   /// Represents the logical "Game Button Right 1" key on the keyboard.
   ///
   /// See the function [RawKeyEvent.logicalKey] for more information.
-  static const LogicalKeyboardKey gameButtonRight1 = LogicalKeyboardKey(0x00100053717, debugName: kReleaseMode ? null : 'Game Button Right 1');
+  static const LogicalKeyboardKey gameButtonRight1 = LogicalKeyboardKey(0x0010005ff17, debugName: kReleaseMode ? null : 'Game Button Right 1');
 
   /// Represents the logical "Game Button Right 2" key on the keyboard.
   ///
   /// See the function [RawKeyEvent.logicalKey] for more information.
-  static const LogicalKeyboardKey gameButtonRight2 = LogicalKeyboardKey(0x00100053718, debugName: kReleaseMode ? null : 'Game Button Right 2');
+  static const LogicalKeyboardKey gameButtonRight2 = LogicalKeyboardKey(0x0010005ff18, debugName: kReleaseMode ? null : 'Game Button Right 2');
 
   /// Represents the logical "Game Button Select" key on the keyboard.
   ///
   /// See the function [RawKeyEvent.logicalKey] for more information.
-  static const LogicalKeyboardKey gameButtonSelect = LogicalKeyboardKey(0x00100053719, debugName: kReleaseMode ? null : 'Game Button Select');
+  static const LogicalKeyboardKey gameButtonSelect = LogicalKeyboardKey(0x0010005ff19, debugName: kReleaseMode ? null : 'Game Button Select');
 
   /// Represents the logical "Game Button Start" key on the keyboard.
   ///
   /// See the function [RawKeyEvent.logicalKey] for more information.
-  static const LogicalKeyboardKey gameButtonStart = LogicalKeyboardKey(0x0010005371a, debugName: kReleaseMode ? null : 'Game Button Start');
+  static const LogicalKeyboardKey gameButtonStart = LogicalKeyboardKey(0x0010005ff1a, debugName: kReleaseMode ? null : 'Game Button Start');
 
   /// Represents the logical "Game Button Thumb Left" key on the keyboard.
   ///
   /// See the function [RawKeyEvent.logicalKey] for more information.
-  static const LogicalKeyboardKey gameButtonThumbLeft = LogicalKeyboardKey(0x0010005371b, debugName: kReleaseMode ? null : 'Game Button Thumb Left');
+  static const LogicalKeyboardKey gameButtonThumbLeft = LogicalKeyboardKey(0x0010005ff1b, debugName: kReleaseMode ? null : 'Game Button Thumb Left');
 
   /// Represents the logical "Game Button Thumb Right" key on the keyboard.
   ///
   /// See the function [RawKeyEvent.logicalKey] for more information.
-  static const LogicalKeyboardKey gameButtonThumbRight = LogicalKeyboardKey(0x0010005371c, debugName: kReleaseMode ? null : 'Game Button Thumb Right');
+  static const LogicalKeyboardKey gameButtonThumbRight = LogicalKeyboardKey(0x0010005ff1c, debugName: kReleaseMode ? null : 'Game Button Thumb Right');
 
   /// Represents the logical "Game Button X" key on the keyboard.
   ///
   /// See the function [RawKeyEvent.logicalKey] for more information.
-  static const LogicalKeyboardKey gameButtonX = LogicalKeyboardKey(0x0010005371d, debugName: kReleaseMode ? null : 'Game Button X');
+  static const LogicalKeyboardKey gameButtonX = LogicalKeyboardKey(0x0010005ff1d, debugName: kReleaseMode ? null : 'Game Button X');
 
   /// Represents the logical "Game Button Y" key on the keyboard.
   ///
   /// See the function [RawKeyEvent.logicalKey] for more information.
-  static const LogicalKeyboardKey gameButtonY = LogicalKeyboardKey(0x0010005371e, debugName: kReleaseMode ? null : 'Game Button Y');
+  static const LogicalKeyboardKey gameButtonY = LogicalKeyboardKey(0x0010005ff1e, debugName: kReleaseMode ? null : 'Game Button Y');
 
   /// Represents the logical "Game Button Z" key on the keyboard.
   ///
   /// See the function [RawKeyEvent.logicalKey] for more information.
-  static const LogicalKeyboardKey gameButtonZ = LogicalKeyboardKey(0x0010005371f, debugName: kReleaseMode ? null : 'Game Button Z');
+  static const LogicalKeyboardKey gameButtonZ = LogicalKeyboardKey(0x0010005ff1f, debugName: kReleaseMode ? null : 'Game Button Z');
+
+  /// Represents the logical "Fn" key on the keyboard.
+  ///
+  /// See the function [RawKeyEvent.logicalKey] for more information.
+  static const LogicalKeyboardKey fn = LogicalKeyboardKey(0x00100000012, debugName: kReleaseMode ? null : 'Fn');
 
   /// Represents the logical "Shift" key on the keyboard.
   ///
@@ -1644,11 +1669,11 @@ class LogicalKeyboardKey extends KeyboardKey {
     0x0100000000: none,
     0x0100000010: hyper,
     0x0100000011: superKey,
-    0x0100000012: fn,
     0x0100000013: fnLock,
     0x0100000014: suspend,
     0x0100000015: resume,
     0x0100000016: turbo,
+    0x0100000017: privacyScreenToggle,
     0x0100010082: sleep,
     0x0100010083: wakeUp,
     0x01000100b5: displayToggleIntExt,
@@ -1826,6 +1851,7 @@ class LogicalKeyboardKey extends KeyboardKey {
     0x01000c009c: channelUp,
     0x01000c009d: channelDown,
     0x01000c00b0: mediaPlay,
+    0x01000c00b1: mediaPause,
     0x01000c00b2: mediaRecord,
     0x01000c00b3: mediaFastForward,
     0x01000c00b4: mediaRewind,
@@ -1875,37 +1901,38 @@ class LogicalKeyboardKey extends KeyboardKey {
     0x01000c028c: mailSend,
     0x01000c029d: keyboardLayoutSelect,
     0x01000c029f: showAllWindows,
-    0x0100053701: gameButton1,
-    0x0100053702: gameButton2,
-    0x0100053703: gameButton3,
-    0x0100053704: gameButton4,
-    0x0100053705: gameButton5,
-    0x0100053706: gameButton6,
-    0x0100053707: gameButton7,
-    0x0100053708: gameButton8,
-    0x0100053709: gameButton9,
-    0x010005370a: gameButton10,
-    0x010005370b: gameButton11,
-    0x010005370c: gameButton12,
-    0x010005370d: gameButton13,
-    0x010005370e: gameButton14,
-    0x010005370f: gameButton15,
-    0x0100053710: gameButton16,
-    0x0100053711: gameButtonA,
-    0x0100053712: gameButtonB,
-    0x0100053713: gameButtonC,
-    0x0100053714: gameButtonLeft1,
-    0x0100053715: gameButtonLeft2,
-    0x0100053716: gameButtonMode,
-    0x0100053717: gameButtonRight1,
-    0x0100053718: gameButtonRight2,
-    0x0100053719: gameButtonSelect,
-    0x010005371a: gameButtonStart,
-    0x010005371b: gameButtonThumbLeft,
-    0x010005371c: gameButtonThumbRight,
-    0x010005371d: gameButtonX,
-    0x010005371e: gameButtonY,
-    0x010005371f: gameButtonZ,
+    0x010005ff01: gameButton1,
+    0x010005ff02: gameButton2,
+    0x010005ff03: gameButton3,
+    0x010005ff04: gameButton4,
+    0x010005ff05: gameButton5,
+    0x010005ff06: gameButton6,
+    0x010005ff07: gameButton7,
+    0x010005ff08: gameButton8,
+    0x010005ff09: gameButton9,
+    0x010005ff0a: gameButton10,
+    0x010005ff0b: gameButton11,
+    0x010005ff0c: gameButton12,
+    0x010005ff0d: gameButton13,
+    0x010005ff0e: gameButton14,
+    0x010005ff0f: gameButton15,
+    0x010005ff10: gameButton16,
+    0x010005ff11: gameButtonA,
+    0x010005ff12: gameButtonB,
+    0x010005ff13: gameButtonC,
+    0x010005ff14: gameButtonLeft1,
+    0x010005ff15: gameButtonLeft2,
+    0x010005ff16: gameButtonMode,
+    0x010005ff17: gameButtonRight1,
+    0x010005ff18: gameButtonRight2,
+    0x010005ff19: gameButtonSelect,
+    0x010005ff1a: gameButtonStart,
+    0x010005ff1b: gameButtonThumbLeft,
+    0x010005ff1c: gameButtonThumbRight,
+    0x010005ff1d: gameButtonX,
+    0x010005ff1e: gameButtonY,
+    0x010005ff1f: gameButtonZ,
+    0x0100000012: fn,
     0x201000700e1: shift,
     0x201000700e3: meta,
     0x201000700e2: alt,
@@ -1945,7 +1972,7 @@ class LogicalKeyboardKey extends KeyboardKey {
 /// looking for "the key next next to the TAB key", since on a French keyboard,
 /// the key next to the TAB key has an "A" on it.
 ///
-/// {@tool snippet --template=stateful_widget_scaffold}
+/// {@tool dartpad --template=stateful_widget_scaffold}
 /// This example shows how to detect if the user has selected the physical key
 /// to the right of the CAPS LOCK key.
 ///
@@ -1985,7 +2012,7 @@ class LogicalKeyboardKey extends KeyboardKey {
 ///     color: Colors.white,
 ///     alignment: Alignment.center,
 ///     child: DefaultTextStyle(
-///       style: textTheme.display1,
+///       style: textTheme.headline4,
 ///       child: RawKeyboardListener(
 ///         focusNode: _focusNode,
 ///         onKey: _handleKeyEvent,
@@ -2021,7 +2048,7 @@ class PhysicalKeyboardKey extends KeyboardKey {
   ///
   /// The [usbHidUsage] must not be null.
   ///
-  /// {@tool sample}
+  /// {@tool snippet}
   /// To save executable size, it is recommended that the [debugName] be null in
   /// release mode. You can do this using the [kReleaseMode] constant.
   ///
@@ -2054,12 +2081,12 @@ class PhysicalKeyboardKey extends KeyboardKey {
   int get hashCode => usbHidUsage.hashCode;
 
   @override
-  bool operator ==(dynamic other) {
+  bool operator ==(Object other) {
     if (other.runtimeType != runtimeType) {
       return false;
     }
-    final PhysicalKeyboardKey typedOther = other;
-    return usbHidUsage == typedOther.usbHidUsage;
+    return other is PhysicalKeyboardKey
+        && other.usbHidUsage == usbHidUsage;
   }
 
   @override
@@ -2087,11 +2114,6 @@ class PhysicalKeyboardKey extends KeyboardKey {
   /// See the function [RawKeyEvent.physicalKey] for more information.
   static const PhysicalKeyboardKey superKey = PhysicalKeyboardKey(0x00000011, debugName: kReleaseMode ? null : 'Super Key');
 
-  /// Represents the location of the "Fn" key on a generalized keyboard.
-  ///
-  /// See the function [RawKeyEvent.physicalKey] for more information.
-  static const PhysicalKeyboardKey fn = PhysicalKeyboardKey(0x00000012, debugName: kReleaseMode ? null : 'Fn');
-
   /// Represents the location of the "Fn Lock" key on a generalized keyboard.
   ///
   /// See the function [RawKeyEvent.physicalKey] for more information.
@@ -2111,6 +2133,12 @@ class PhysicalKeyboardKey extends KeyboardKey {
   ///
   /// See the function [RawKeyEvent.physicalKey] for more information.
   static const PhysicalKeyboardKey turbo = PhysicalKeyboardKey(0x00000016, debugName: kReleaseMode ? null : 'Turbo');
+
+  /// Represents the location of the "Privacy Screen Toggle" key on a
+  /// generalized keyboard.
+  ///
+  /// See the function [RawKeyEvent.physicalKey] for more information.
+  static const PhysicalKeyboardKey privacyScreenToggle = PhysicalKeyboardKey(0x00000017, debugName: kReleaseMode ? null : 'Privacy Screen Toggle');
 
   /// Represents the location of the "Sleep" key on a generalized keyboard.
   ///
@@ -3044,6 +3072,12 @@ class PhysicalKeyboardKey extends KeyboardKey {
   /// See the function [RawKeyEvent.physicalKey] for more information.
   static const PhysicalKeyboardKey mediaPlay = PhysicalKeyboardKey(0x000c00b0, debugName: kReleaseMode ? null : 'Media Play');
 
+  /// Represents the location of the "Media Pause" key on a generalized
+  /// keyboard.
+  ///
+  /// See the function [RawKeyEvent.physicalKey] for more information.
+  static const PhysicalKeyboardKey mediaPause = PhysicalKeyboardKey(0x000c00b1, debugName: kReleaseMode ? null : 'Media Pause');
+
   /// Represents the location of the "Media Record" key on a generalized
   /// keyboard.
   ///
@@ -3329,187 +3363,192 @@ class PhysicalKeyboardKey extends KeyboardKey {
   /// keyboard.
   ///
   /// See the function [RawKeyEvent.physicalKey] for more information.
-  static const PhysicalKeyboardKey gameButton1 = PhysicalKeyboardKey(0x00053701, debugName: kReleaseMode ? null : 'Game Button 1');
+  static const PhysicalKeyboardKey gameButton1 = PhysicalKeyboardKey(0x0005ff01, debugName: kReleaseMode ? null : 'Game Button 1');
 
   /// Represents the location of the "Game Button 2" key on a generalized
   /// keyboard.
   ///
   /// See the function [RawKeyEvent.physicalKey] for more information.
-  static const PhysicalKeyboardKey gameButton2 = PhysicalKeyboardKey(0x00053702, debugName: kReleaseMode ? null : 'Game Button 2');
+  static const PhysicalKeyboardKey gameButton2 = PhysicalKeyboardKey(0x0005ff02, debugName: kReleaseMode ? null : 'Game Button 2');
 
   /// Represents the location of the "Game Button 3" key on a generalized
   /// keyboard.
   ///
   /// See the function [RawKeyEvent.physicalKey] for more information.
-  static const PhysicalKeyboardKey gameButton3 = PhysicalKeyboardKey(0x00053703, debugName: kReleaseMode ? null : 'Game Button 3');
+  static const PhysicalKeyboardKey gameButton3 = PhysicalKeyboardKey(0x0005ff03, debugName: kReleaseMode ? null : 'Game Button 3');
 
   /// Represents the location of the "Game Button 4" key on a generalized
   /// keyboard.
   ///
   /// See the function [RawKeyEvent.physicalKey] for more information.
-  static const PhysicalKeyboardKey gameButton4 = PhysicalKeyboardKey(0x00053704, debugName: kReleaseMode ? null : 'Game Button 4');
+  static const PhysicalKeyboardKey gameButton4 = PhysicalKeyboardKey(0x0005ff04, debugName: kReleaseMode ? null : 'Game Button 4');
 
   /// Represents the location of the "Game Button 5" key on a generalized
   /// keyboard.
   ///
   /// See the function [RawKeyEvent.physicalKey] for more information.
-  static const PhysicalKeyboardKey gameButton5 = PhysicalKeyboardKey(0x00053705, debugName: kReleaseMode ? null : 'Game Button 5');
+  static const PhysicalKeyboardKey gameButton5 = PhysicalKeyboardKey(0x0005ff05, debugName: kReleaseMode ? null : 'Game Button 5');
 
   /// Represents the location of the "Game Button 6" key on a generalized
   /// keyboard.
   ///
   /// See the function [RawKeyEvent.physicalKey] for more information.
-  static const PhysicalKeyboardKey gameButton6 = PhysicalKeyboardKey(0x00053706, debugName: kReleaseMode ? null : 'Game Button 6');
+  static const PhysicalKeyboardKey gameButton6 = PhysicalKeyboardKey(0x0005ff06, debugName: kReleaseMode ? null : 'Game Button 6');
 
   /// Represents the location of the "Game Button 7" key on a generalized
   /// keyboard.
   ///
   /// See the function [RawKeyEvent.physicalKey] for more information.
-  static const PhysicalKeyboardKey gameButton7 = PhysicalKeyboardKey(0x00053707, debugName: kReleaseMode ? null : 'Game Button 7');
+  static const PhysicalKeyboardKey gameButton7 = PhysicalKeyboardKey(0x0005ff07, debugName: kReleaseMode ? null : 'Game Button 7');
 
   /// Represents the location of the "Game Button 8" key on a generalized
   /// keyboard.
   ///
   /// See the function [RawKeyEvent.physicalKey] for more information.
-  static const PhysicalKeyboardKey gameButton8 = PhysicalKeyboardKey(0x00053708, debugName: kReleaseMode ? null : 'Game Button 8');
+  static const PhysicalKeyboardKey gameButton8 = PhysicalKeyboardKey(0x0005ff08, debugName: kReleaseMode ? null : 'Game Button 8');
 
   /// Represents the location of the "Game Button 9" key on a generalized
   /// keyboard.
   ///
   /// See the function [RawKeyEvent.physicalKey] for more information.
-  static const PhysicalKeyboardKey gameButton9 = PhysicalKeyboardKey(0x00053709, debugName: kReleaseMode ? null : 'Game Button 9');
+  static const PhysicalKeyboardKey gameButton9 = PhysicalKeyboardKey(0x0005ff09, debugName: kReleaseMode ? null : 'Game Button 9');
 
   /// Represents the location of the "Game Button 10" key on a generalized
   /// keyboard.
   ///
   /// See the function [RawKeyEvent.physicalKey] for more information.
-  static const PhysicalKeyboardKey gameButton10 = PhysicalKeyboardKey(0x0005370a, debugName: kReleaseMode ? null : 'Game Button 10');
+  static const PhysicalKeyboardKey gameButton10 = PhysicalKeyboardKey(0x0005ff0a, debugName: kReleaseMode ? null : 'Game Button 10');
 
   /// Represents the location of the "Game Button 11" key on a generalized
   /// keyboard.
   ///
   /// See the function [RawKeyEvent.physicalKey] for more information.
-  static const PhysicalKeyboardKey gameButton11 = PhysicalKeyboardKey(0x0005370b, debugName: kReleaseMode ? null : 'Game Button 11');
+  static const PhysicalKeyboardKey gameButton11 = PhysicalKeyboardKey(0x0005ff0b, debugName: kReleaseMode ? null : 'Game Button 11');
 
   /// Represents the location of the "Game Button 12" key on a generalized
   /// keyboard.
   ///
   /// See the function [RawKeyEvent.physicalKey] for more information.
-  static const PhysicalKeyboardKey gameButton12 = PhysicalKeyboardKey(0x0005370c, debugName: kReleaseMode ? null : 'Game Button 12');
+  static const PhysicalKeyboardKey gameButton12 = PhysicalKeyboardKey(0x0005ff0c, debugName: kReleaseMode ? null : 'Game Button 12');
 
   /// Represents the location of the "Game Button 13" key on a generalized
   /// keyboard.
   ///
   /// See the function [RawKeyEvent.physicalKey] for more information.
-  static const PhysicalKeyboardKey gameButton13 = PhysicalKeyboardKey(0x0005370d, debugName: kReleaseMode ? null : 'Game Button 13');
+  static const PhysicalKeyboardKey gameButton13 = PhysicalKeyboardKey(0x0005ff0d, debugName: kReleaseMode ? null : 'Game Button 13');
 
   /// Represents the location of the "Game Button 14" key on a generalized
   /// keyboard.
   ///
   /// See the function [RawKeyEvent.physicalKey] for more information.
-  static const PhysicalKeyboardKey gameButton14 = PhysicalKeyboardKey(0x0005370e, debugName: kReleaseMode ? null : 'Game Button 14');
+  static const PhysicalKeyboardKey gameButton14 = PhysicalKeyboardKey(0x0005ff0e, debugName: kReleaseMode ? null : 'Game Button 14');
 
   /// Represents the location of the "Game Button 15" key on a generalized
   /// keyboard.
   ///
   /// See the function [RawKeyEvent.physicalKey] for more information.
-  static const PhysicalKeyboardKey gameButton15 = PhysicalKeyboardKey(0x0005370f, debugName: kReleaseMode ? null : 'Game Button 15');
+  static const PhysicalKeyboardKey gameButton15 = PhysicalKeyboardKey(0x0005ff0f, debugName: kReleaseMode ? null : 'Game Button 15');
 
   /// Represents the location of the "Game Button 16" key on a generalized
   /// keyboard.
   ///
   /// See the function [RawKeyEvent.physicalKey] for more information.
-  static const PhysicalKeyboardKey gameButton16 = PhysicalKeyboardKey(0x00053710, debugName: kReleaseMode ? null : 'Game Button 16');
+  static const PhysicalKeyboardKey gameButton16 = PhysicalKeyboardKey(0x0005ff10, debugName: kReleaseMode ? null : 'Game Button 16');
 
   /// Represents the location of the "Game Button A" key on a generalized
   /// keyboard.
   ///
   /// See the function [RawKeyEvent.physicalKey] for more information.
-  static const PhysicalKeyboardKey gameButtonA = PhysicalKeyboardKey(0x00053711, debugName: kReleaseMode ? null : 'Game Button A');
+  static const PhysicalKeyboardKey gameButtonA = PhysicalKeyboardKey(0x0005ff11, debugName: kReleaseMode ? null : 'Game Button A');
 
   /// Represents the location of the "Game Button B" key on a generalized
   /// keyboard.
   ///
   /// See the function [RawKeyEvent.physicalKey] for more information.
-  static const PhysicalKeyboardKey gameButtonB = PhysicalKeyboardKey(0x00053712, debugName: kReleaseMode ? null : 'Game Button B');
+  static const PhysicalKeyboardKey gameButtonB = PhysicalKeyboardKey(0x0005ff12, debugName: kReleaseMode ? null : 'Game Button B');
 
   /// Represents the location of the "Game Button C" key on a generalized
   /// keyboard.
   ///
   /// See the function [RawKeyEvent.physicalKey] for more information.
-  static const PhysicalKeyboardKey gameButtonC = PhysicalKeyboardKey(0x00053713, debugName: kReleaseMode ? null : 'Game Button C');
+  static const PhysicalKeyboardKey gameButtonC = PhysicalKeyboardKey(0x0005ff13, debugName: kReleaseMode ? null : 'Game Button C');
 
   /// Represents the location of the "Game Button Left 1" key on a generalized
   /// keyboard.
   ///
   /// See the function [RawKeyEvent.physicalKey] for more information.
-  static const PhysicalKeyboardKey gameButtonLeft1 = PhysicalKeyboardKey(0x00053714, debugName: kReleaseMode ? null : 'Game Button Left 1');
+  static const PhysicalKeyboardKey gameButtonLeft1 = PhysicalKeyboardKey(0x0005ff14, debugName: kReleaseMode ? null : 'Game Button Left 1');
 
   /// Represents the location of the "Game Button Left 2" key on a generalized
   /// keyboard.
   ///
   /// See the function [RawKeyEvent.physicalKey] for more information.
-  static const PhysicalKeyboardKey gameButtonLeft2 = PhysicalKeyboardKey(0x00053715, debugName: kReleaseMode ? null : 'Game Button Left 2');
+  static const PhysicalKeyboardKey gameButtonLeft2 = PhysicalKeyboardKey(0x0005ff15, debugName: kReleaseMode ? null : 'Game Button Left 2');
 
   /// Represents the location of the "Game Button Mode" key on a generalized
   /// keyboard.
   ///
   /// See the function [RawKeyEvent.physicalKey] for more information.
-  static const PhysicalKeyboardKey gameButtonMode = PhysicalKeyboardKey(0x00053716, debugName: kReleaseMode ? null : 'Game Button Mode');
+  static const PhysicalKeyboardKey gameButtonMode = PhysicalKeyboardKey(0x0005ff16, debugName: kReleaseMode ? null : 'Game Button Mode');
 
   /// Represents the location of the "Game Button Right 1" key on a generalized
   /// keyboard.
   ///
   /// See the function [RawKeyEvent.physicalKey] for more information.
-  static const PhysicalKeyboardKey gameButtonRight1 = PhysicalKeyboardKey(0x00053717, debugName: kReleaseMode ? null : 'Game Button Right 1');
+  static const PhysicalKeyboardKey gameButtonRight1 = PhysicalKeyboardKey(0x0005ff17, debugName: kReleaseMode ? null : 'Game Button Right 1');
 
   /// Represents the location of the "Game Button Right 2" key on a generalized
   /// keyboard.
   ///
   /// See the function [RawKeyEvent.physicalKey] for more information.
-  static const PhysicalKeyboardKey gameButtonRight2 = PhysicalKeyboardKey(0x00053718, debugName: kReleaseMode ? null : 'Game Button Right 2');
+  static const PhysicalKeyboardKey gameButtonRight2 = PhysicalKeyboardKey(0x0005ff18, debugName: kReleaseMode ? null : 'Game Button Right 2');
 
   /// Represents the location of the "Game Button Select" key on a generalized
   /// keyboard.
   ///
   /// See the function [RawKeyEvent.physicalKey] for more information.
-  static const PhysicalKeyboardKey gameButtonSelect = PhysicalKeyboardKey(0x00053719, debugName: kReleaseMode ? null : 'Game Button Select');
+  static const PhysicalKeyboardKey gameButtonSelect = PhysicalKeyboardKey(0x0005ff19, debugName: kReleaseMode ? null : 'Game Button Select');
 
   /// Represents the location of the "Game Button Start" key on a generalized
   /// keyboard.
   ///
   /// See the function [RawKeyEvent.physicalKey] for more information.
-  static const PhysicalKeyboardKey gameButtonStart = PhysicalKeyboardKey(0x0005371a, debugName: kReleaseMode ? null : 'Game Button Start');
+  static const PhysicalKeyboardKey gameButtonStart = PhysicalKeyboardKey(0x0005ff1a, debugName: kReleaseMode ? null : 'Game Button Start');
 
   /// Represents the location of the "Game Button Thumb Left" key on a
   /// generalized keyboard.
   ///
   /// See the function [RawKeyEvent.physicalKey] for more information.
-  static const PhysicalKeyboardKey gameButtonThumbLeft = PhysicalKeyboardKey(0x0005371b, debugName: kReleaseMode ? null : 'Game Button Thumb Left');
+  static const PhysicalKeyboardKey gameButtonThumbLeft = PhysicalKeyboardKey(0x0005ff1b, debugName: kReleaseMode ? null : 'Game Button Thumb Left');
 
   /// Represents the location of the "Game Button Thumb Right" key on a
   /// generalized keyboard.
   ///
   /// See the function [RawKeyEvent.physicalKey] for more information.
-  static const PhysicalKeyboardKey gameButtonThumbRight = PhysicalKeyboardKey(0x0005371c, debugName: kReleaseMode ? null : 'Game Button Thumb Right');
+  static const PhysicalKeyboardKey gameButtonThumbRight = PhysicalKeyboardKey(0x0005ff1c, debugName: kReleaseMode ? null : 'Game Button Thumb Right');
 
   /// Represents the location of the "Game Button X" key on a generalized
   /// keyboard.
   ///
   /// See the function [RawKeyEvent.physicalKey] for more information.
-  static const PhysicalKeyboardKey gameButtonX = PhysicalKeyboardKey(0x0005371d, debugName: kReleaseMode ? null : 'Game Button X');
+  static const PhysicalKeyboardKey gameButtonX = PhysicalKeyboardKey(0x0005ff1d, debugName: kReleaseMode ? null : 'Game Button X');
 
   /// Represents the location of the "Game Button Y" key on a generalized
   /// keyboard.
   ///
   /// See the function [RawKeyEvent.physicalKey] for more information.
-  static const PhysicalKeyboardKey gameButtonY = PhysicalKeyboardKey(0x0005371e, debugName: kReleaseMode ? null : 'Game Button Y');
+  static const PhysicalKeyboardKey gameButtonY = PhysicalKeyboardKey(0x0005ff1e, debugName: kReleaseMode ? null : 'Game Button Y');
 
   /// Represents the location of the "Game Button Z" key on a generalized
   /// keyboard.
   ///
   /// See the function [RawKeyEvent.physicalKey] for more information.
-  static const PhysicalKeyboardKey gameButtonZ = PhysicalKeyboardKey(0x0005371f, debugName: kReleaseMode ? null : 'Game Button Z');
+  static const PhysicalKeyboardKey gameButtonZ = PhysicalKeyboardKey(0x0005ff1f, debugName: kReleaseMode ? null : 'Game Button Z');
+
+  /// Represents the location of the "Fn" key on a generalized keyboard.
+  ///
+  /// See the function [RawKeyEvent.physicalKey] for more information.
+  static const PhysicalKeyboardKey fn = PhysicalKeyboardKey(0x00000012, debugName: kReleaseMode ? null : 'Fn');
 
   // A list of all the predefined constant PhysicalKeyboardKeys so that they
   // can be searched.
@@ -3517,11 +3556,11 @@ class PhysicalKeyboardKey extends KeyboardKey {
     0x00000000: none,
     0x00000010: hyper,
     0x00000011: superKey,
-    0x00000012: fn,
     0x00000013: fnLock,
     0x00000014: suspend,
     0x00000015: resume,
     0x00000016: turbo,
+    0x00000017: privacyScreenToggle,
     0x00010082: sleep,
     0x00010083: wakeUp,
     0x000100b5: displayToggleIntExt,
@@ -3699,6 +3738,7 @@ class PhysicalKeyboardKey extends KeyboardKey {
     0x000c009c: channelUp,
     0x000c009d: channelDown,
     0x000c00b0: mediaPlay,
+    0x000c00b1: mediaPause,
     0x000c00b2: mediaRecord,
     0x000c00b3: mediaFastForward,
     0x000c00b4: mediaRewind,
@@ -3748,36 +3788,37 @@ class PhysicalKeyboardKey extends KeyboardKey {
     0x000c028c: mailSend,
     0x000c029d: keyboardLayoutSelect,
     0x000c029f: showAllWindows,
-    0x00053701: gameButton1,
-    0x00053702: gameButton2,
-    0x00053703: gameButton3,
-    0x00053704: gameButton4,
-    0x00053705: gameButton5,
-    0x00053706: gameButton6,
-    0x00053707: gameButton7,
-    0x00053708: gameButton8,
-    0x00053709: gameButton9,
-    0x0005370a: gameButton10,
-    0x0005370b: gameButton11,
-    0x0005370c: gameButton12,
-    0x0005370d: gameButton13,
-    0x0005370e: gameButton14,
-    0x0005370f: gameButton15,
-    0x00053710: gameButton16,
-    0x00053711: gameButtonA,
-    0x00053712: gameButtonB,
-    0x00053713: gameButtonC,
-    0x00053714: gameButtonLeft1,
-    0x00053715: gameButtonLeft2,
-    0x00053716: gameButtonMode,
-    0x00053717: gameButtonRight1,
-    0x00053718: gameButtonRight2,
-    0x00053719: gameButtonSelect,
-    0x0005371a: gameButtonStart,
-    0x0005371b: gameButtonThumbLeft,
-    0x0005371c: gameButtonThumbRight,
-    0x0005371d: gameButtonX,
-    0x0005371e: gameButtonY,
-    0x0005371f: gameButtonZ,
+    0x0005ff01: gameButton1,
+    0x0005ff02: gameButton2,
+    0x0005ff03: gameButton3,
+    0x0005ff04: gameButton4,
+    0x0005ff05: gameButton5,
+    0x0005ff06: gameButton6,
+    0x0005ff07: gameButton7,
+    0x0005ff08: gameButton8,
+    0x0005ff09: gameButton9,
+    0x0005ff0a: gameButton10,
+    0x0005ff0b: gameButton11,
+    0x0005ff0c: gameButton12,
+    0x0005ff0d: gameButton13,
+    0x0005ff0e: gameButton14,
+    0x0005ff0f: gameButton15,
+    0x0005ff10: gameButton16,
+    0x0005ff11: gameButtonA,
+    0x0005ff12: gameButtonB,
+    0x0005ff13: gameButtonC,
+    0x0005ff14: gameButtonLeft1,
+    0x0005ff15: gameButtonLeft2,
+    0x0005ff16: gameButtonMode,
+    0x0005ff17: gameButtonRight1,
+    0x0005ff18: gameButtonRight2,
+    0x0005ff19: gameButtonSelect,
+    0x0005ff1a: gameButtonStart,
+    0x0005ff1b: gameButtonThumbLeft,
+    0x0005ff1c: gameButtonThumbRight,
+    0x0005ff1d: gameButtonX,
+    0x0005ff1e: gameButtonY,
+    0x0005ff1f: gameButtonZ,
+    0x00000012: fn,
   };
 }

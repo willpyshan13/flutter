@@ -1,10 +1,10 @@
-// Copyright 2019 The Flutter Authors. All rights reserved.
+// Copyright 2014 The Flutter Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:flutter/widgets.dart';
 import 'package:flutter/cupertino.dart';
+import 'package:flutter/widgets.dart';
 
 void main() {
   group('canSelectAll', () {
@@ -23,7 +23,7 @@ void main() {
           style: const TextStyle(),
           cursorColor: const Color.fromARGB(0, 0, 0, 0),
           backgroundCursorColor: const Color.fromARGB(0, 0, 0, 0),
-        )
+        ),
       );
     }
 
@@ -60,6 +60,42 @@ void main() {
         selection: const TextSelection(baseOffset: 0, extentOffset: 3),
       ));
       expect(cupertinoTextSelectionControls.canSelectAll(key.currentState), false);
+    });
+  });
+
+  group('cupertino handles', () {
+    testWidgets('draws transparent handle correctly', (WidgetTester tester) async {
+      await tester.pumpWidget(RepaintBoundary(
+        child: CupertinoTheme(
+          data: const CupertinoThemeData(
+            primaryColor: Color(0x550000AA),
+          ),
+          child: Builder(
+            builder: (BuildContext context) {
+              return Container(
+                color: CupertinoColors.white,
+                height: 800,
+                width: 800,
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 250),
+                  child: FittedBox(
+                    child: cupertinoTextSelectionControls.buildHandle(
+                      context,
+                      TextSelectionHandleType.right,
+                      10.0,
+                    ),
+                  ),
+                ),
+              );
+            },
+          ),
+        ),
+      ));
+
+      await expectLater(
+        find.byType(RepaintBoundary),
+        matchesGoldenFile('text_selection.handle.transparent.png'),
+      );
     });
   });
 }

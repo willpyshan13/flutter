@@ -28,7 +28,7 @@
   "continueButtonLabel": "WEITER",
   "copyButtonLabel": "KOPIEREN",
   "cutButtonLabel": "AUSSCHNEIDEN",
-  "okButtonLabel": "Ok",
+  "okButtonLabel": "OK",
   "pasteButtonLabel": "EINFÜGEN",
   "selectAllButtonLabel": "ALLE AUSWÄHLEN",
   "viewLicensesButtonLabel": "LIZENZEN ANZEIGEN",
@@ -51,5 +51,6 @@
   "remainingTextFieldCharacterCountZero": "TBD",
   "remainingTextFieldCharacterCountOne": "Noch 1 Zeichen",
   "remainingTextFieldCharacterCountOther": "Noch $remainingCount Zeichen",
-  "refreshIndicatorSemanticLabel": "Aktualisieren"
+  "refreshIndicatorSemanticLabel": "Aktualisieren",
+  "moreButtonTooltip": "TBD"
 }

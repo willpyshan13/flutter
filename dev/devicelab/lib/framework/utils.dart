@@ -1,4 +1,4 @@
-// Copyright (c) 2016 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Flutter Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -13,15 +13,31 @@ import 'package:path/path.dart' as path;
 import 'package:process/process.dart';
 import 'package:stack_trace/stack_trace.dart';
 
+import 'framework.dart';
+
 /// Virtual current working directory, which affect functions, such as [exec].
 String cwd = Directory.current.path;
 
 /// The local engine to use for [flutter] and [evalFlutter], if any.
-String get localEngine => const String.fromEnvironment('localEngine');
+String get localEngine {
+  // Use two distinct `defaultValue`s to determine whether a 'localEngine'
+  // declaration exists in the environment.
+  const bool isDefined =
+      String.fromEnvironment('localEngine', defaultValue: 'a') ==
+          String.fromEnvironment('localEngine', defaultValue: 'b');
+  return isDefined ? const String.fromEnvironment('localEngine') : null;
+}
 
 /// The local engine source path to use if a local engine is used for [flutter]
 /// and [evalFlutter].
-String get localEngineSrcPath => const String.fromEnvironment('localEngineSrcPath');
+String get localEngineSrcPath {
+  // Use two distinct `defaultValue`s to determine whether a
+  // 'localEngineSrcPath' declaration exists in the environment.
+  const bool isDefined =
+      String.fromEnvironment('localEngineSrcPath', defaultValue: 'a') ==
+          String.fromEnvironment('localEngineSrcPath', defaultValue: 'b');
+  return isDefined ? const String.fromEnvironment('localEngineSrcPath') : null;
+}
 
 List<ProcessInfo> _runningProcesses = <ProcessInfo>[];
 ProcessManager _processManager = const LocalProcessManager();
@@ -61,7 +77,7 @@ class HealthCheckResult {
     if (details != null && details.trim().isNotEmpty) {
       buf.writeln();
       // Indent details by 4 spaces
-      for (String line in details.trim().split('\n')) {
+      for (final String line in details.trim().split('\n')) {
         buf.writeln('    $line');
       }
     }
@@ -117,9 +133,9 @@ void recursiveCopy(Directory source, Directory target) {
   if (!target.existsSync())
     target.createSync();
 
-  for (FileSystemEntity entity in source.listSync(followLinks: false)) {
+  for (final FileSystemEntity entity in source.listSync(followLinks: false)) {
     final String name = path.basename(entity.path);
-    if (entity is Directory)
+    if (entity is Directory && !entity.path.contains('.dart_tool'))
       recursiveCopy(entity, Directory(path.join(target.path, name)));
     else if (entity is File) {
       final File dest = File(path.join(target.path, name));
@@ -184,7 +200,7 @@ void section(String title) {
 Future<String> getDartVersion() async {
   // The Dart VM returns the version text to stderr.
   final ProcessResult result = _processManager.runSync(<String>[dartBin, '--version']);
-  String version = result.stderr.trim();
+  String version = (result.stderr as String).trim();
 
   // Convert:
   //   Dart VM version: 1.17.0-dev.2.0 (Tue May  3 12:14:52 2016) on "macos_x64"
@@ -255,13 +271,15 @@ Future<Process> startProcess(
 }) async {
   assert(isBot != null);
   final String command = '$executable ${arguments?.join(" ") ?? ""}';
-  print('\nExecuting: $command');
+  final String finalWorkingDirectory = workingDirectory ?? cwd;
+  print('\nExecuting: $command in $finalWorkingDirectory'
+      + (environment != null ? ' with environment $environment' : ''));
   environment ??= <String, String>{};
   environment['BOT'] = isBot ? 'true' : 'false';
   final Process process = await _processManager.start(
     <String>[executable, ...arguments],
     environment: environment,
-    workingDirectory: workingDirectory ?? cwd,
+    workingDirectory: finalWorkingDirectory,
   );
   final ProcessInfo processInfo = ProcessInfo(command, process);
   _runningProcesses.add(processInfo);
@@ -282,7 +300,7 @@ Future<void> forceQuitRunningProcesses() async {
   await Future<void>.delayed(const Duration(seconds: 1));
 
   // Whatever's left, kill it.
-  for (ProcessInfo p in _runningProcesses) {
+  for (final ProcessInfo p in _runningProcesses) {
     print('Force-quitting process:\n$p');
     if (!p.process.kill()) {
       print('Failed to force quit process');
@@ -300,7 +318,20 @@ Future<int> exec(
   String workingDirectory,
 }) async {
   final Process process = await startProcess(executable, arguments, environment: environment, workingDirectory: workingDirectory);
+  await forwardStandardStreams(process);
+  final int exitCode = await process.exitCode;
 
+  if (exitCode != 0 && !canFail)
+    fail('Executable "$executable" failed with exit code $exitCode.');
+
+  return exitCode;
+}
+
+/// Forwards standard out and standard error from [process] to this process'
+/// respective outputs.
+///
+/// Returns a future that completes when both out and error streams a closed.
+Future<void> forwardStandardStreams(Process process) {
   final Completer<void> stdoutDone = Completer<void>();
   final Completer<void> stderrDone = Completer<void>();
   process.stdout
@@ -316,13 +347,7 @@ Future<int> exec(
         print('stderr: $line');
       }, onDone: () { stderrDone.complete(); });
 
-  await Future.wait<void>(<Future<void>>[stdoutDone.future, stderrDone.future]);
-  final int exitCode = await process.exitCode;
-
-  if (exitCode != 0 && !canFail)
-    fail('Executable "$executable" failed with exit code $exitCode.');
-
-  return exitCode;
+  return Future.wait<void>(<Future<void>>[stdoutDone.future, stderrDone.future]);
 }
 
 /// Executes a command and returns its standard output as a String.
@@ -447,7 +472,7 @@ void cd(dynamic directory) {
     throw 'Cannot cd into directory that does not exist: $directory';
 }
 
-Directory get flutterDirectory => dir('../..').absolute;
+Directory get flutterDirectory => Directory.current.parent.parent;
 
 String requireEnvVar(String name) {
   final String value = Platform.environment[name];
@@ -461,7 +486,7 @@ String requireEnvVar(String name) {
 T requireConfigProperty<T>(Map<String, dynamic> map, String propertyName) {
   if (!map.containsKey(propertyName))
     fail('Configuration property not found: $propertyName');
-  final T result = map[propertyName];
+  final T result = map[propertyName] as T;
   return result;
 }
 
@@ -567,7 +592,7 @@ String extractCloudAuthTokenArg(List<String> rawArgs) {
     return null;
   }
 
-  final String token = args['cloud-auth-token'];
+  final String token = args['cloud-auth-token'] as String;
   if (token == null) {
     stderr.writeln('Required option --cloud-auth-token not found');
     return null;
@@ -577,8 +602,8 @@ String extractCloudAuthTokenArg(List<String> rawArgs) {
 
 final RegExp _obsRegExp =
   RegExp('An Observatory debugger .* is available at: ');
-final RegExp _obsPortRegExp = RegExp('(\\S+:(\\d+)/\\S*)\$');
-final RegExp _obsUriRegExp = RegExp('((http|\/\/)[a-zA-Z0-9:/=_\\-\.\\[\\]]+)');
+final RegExp _obsPortRegExp = RegExp(r'(\S+:(\d+)/\S*)$');
+final RegExp _obsUriRegExp = RegExp(r'((http|//)[a-zA-Z0-9:/=_\-\.\[\]]+)');
 
 /// Tries to extract a port from the string.
 ///
@@ -598,7 +623,7 @@ int parseServicePort(String line, {
   return matches.isEmpty ? null : int.parse(matches[0].group(2));
 }
 
-/// Tries to extract a Uri from the string.
+/// Tries to extract a URL from the string.
 ///
 /// The `prefix`, if specified, is a regular expression pattern and must not contain groups.
 /// `prefix` defaults to the RegExp: `An Observatory debugger .* is available at: `.
@@ -619,6 +644,52 @@ Uri parseServiceUri(String line, {
 /// Checks that the file exists, otherwise throws a [FileSystemException].
 void checkFileExists(String file) {
   if (!exists(File(file))) {
-    throw FileSystemException('Expected file to exit.', file);
+    throw FileSystemException('Expected file to exist.', file);
+  }
+}
+
+/// Checks that the file does not exists, otherwise throws a [FileSystemException].
+void checkFileNotExists(String file) {
+  if (exists(File(file))) {
+    throw FileSystemException('Expected file to not exist.', file);
+  }
+}
+
+/// Checks that the directory exists, otherwise throws a [FileSystemException].
+void checkDirectoryExists(String directory) {
+  if (!exists(Directory(directory))) {
+    throw FileSystemException('Expected directory to exist.', directory);
+  }
+}
+
+/// Check that `collection` contains all entries in `values`.
+void checkCollectionContains<T>(Iterable<T> values, Iterable<T> collection) {
+  for (final T value in values) {
+    if (!collection.contains(value)) {
+      throw TaskResult.failure('Expected to find `$value` in `${collection.toString()}`.');
+    }
+  }
+}
+
+/// Check that `collection` does not contain any entries in `values`
+void checkCollectionDoesNotContain<T>(Iterable<T> values, Iterable<T> collection) {
+  for (final T value in values) {
+    if (collection.contains(value)) {
+      throw TaskResult.failure('Did not expect to find `$value` in `$collection`.');
+    }
+  }
+}
+
+/// Checks that the contents of a [File] at `filePath` contains the specified
+/// [Pattern]s, otherwise throws a [TaskResult].
+void checkFileContains(List<Pattern> patterns, String filePath) {
+  final String fileContent = File(filePath).readAsStringSync();
+  for (final Pattern pattern in patterns) {
+    if (!fileContent.contains(pattern)) {
+      throw TaskResult.failure(
+        'Expected to find `$pattern` in `$filePath` '
+        'instead it found:\n$fileContent'
+      );
+    }
   }
 }

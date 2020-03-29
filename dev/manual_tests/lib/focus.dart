@@ -1,7 +1,8 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Flutter Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
@@ -129,14 +130,14 @@ class _FocusDemoState extends State<FocusDemo> {
   Widget build(BuildContext context) {
     final TextTheme textTheme = Theme.of(context).textTheme;
 
-    return DefaultFocusTraversal(
+    return FocusTraversalGroup(
       policy: ReadingOrderTraversalPolicy(),
       child: FocusScope(
         debugLabel: 'Scope',
         onKey: _handleKeyPress,
         autofocus: true,
         child: DefaultTextStyle(
-          style: textTheme.display1,
+          style: textTheme.headline4,
           child: Scaffold(
             appBar: AppBar(
               title: const Text('Focus Demo'),
@@ -184,8 +185,8 @@ class _FocusDemoState extends State<FocusDemo> {
                         decoration: InputDecoration(labelText: 'Enter Text', filled: true),
                       ),
                     ),
-                    Padding(
-                      padding: const EdgeInsets.all(8.0),
+                    const Padding(
+                      padding: EdgeInsets.all(8.0),
                       child: TextField(
                         decoration: InputDecoration(
                           border: OutlineInputBorder(),
