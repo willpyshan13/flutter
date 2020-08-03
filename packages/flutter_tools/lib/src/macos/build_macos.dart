@@ -2,6 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+import 'package:meta/meta.dart';
+
 import '../base/common.dart';
 import '../base/file_system.dart';
 import '../base/logger.dart';
@@ -18,6 +20,7 @@ Future<void> buildMacOS({
   FlutterProject flutterProject,
   BuildInfo buildInfo,
   String targetOverride,
+  @required bool verboseLogging,
 }) async {
   if (!flutterProject.macos.xcodeWorkspace.existsSync()) {
     throwToolExit('No macOS desktop project configured. '
@@ -58,7 +61,7 @@ Future<void> buildMacOS({
   );
   final String scheme = projectInfo.schemeFor(buildInfo);
   if (scheme == null) {
-    throwToolExit('Unable to find expected scheme in Xcode project.');
+    projectInfo.reportFlavorNotFoundAndExit();
   }
   final String configuration = projectInfo.buildConfigurationFor(buildInfo, scheme);
   if (configuration == null) {
@@ -83,6 +86,8 @@ Future<void> buildMacOS({
       '-derivedDataPath', flutterBuildDir.absolute.path,
       'OBJROOT=${globals.fs.path.join(flutterBuildDir.absolute.path, 'Build', 'Intermediates.noindex')}',
       'SYMROOT=${globals.fs.path.join(flutterBuildDir.absolute.path, 'Build', 'Products')}',
+      if (verboseLogging)
+        'VERBOSE_SCRIPT_LOGGING=YES',
       'COMPILER_INDEX_STORE_ENABLE=NO',
       ...environmentVariablesAsXcodeBuildSettings(globals.platform)
     ], trace: true);

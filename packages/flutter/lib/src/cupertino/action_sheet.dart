@@ -2,6 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+// @dart = 2.8
+
 import 'dart:ui' show ImageFilter;
 
 import 'package:flutter/foundation.dart';
@@ -74,6 +76,8 @@ const double _kCornerRadius = 14.0;
 const double _kDividerThickness = 1.0;
 
 /// An iOS-style action sheet.
+///
+/// {@youtube 560 315 https://www.youtube.com/watch?v=U-ao8p4A82k}
 ///
 /// An action sheet is a specific style of alert that presents the user
 /// with a set of two or more choices related to the current context.
@@ -834,7 +838,7 @@ class _CupertinoAlertContentSection extends StatelessWidget {
     if (titleContentGroup.isEmpty) {
       return SingleChildScrollView(
         controller: scrollController,
-        child: Container(
+        child: const SizedBox(
           width: 0.0,
           height: 0.0,
         ),
@@ -937,13 +941,15 @@ class _PressableActionButtonState extends State<_PressableActionButton> {
   Widget build(BuildContext context) {
     return _ActionButtonParentDataWidget(
       isPressed: _isPressed,
-      // TODO(mattcarroll): Button press dynamics need overhaul for iOS: https://github.com/flutter/flutter/issues/19786
+      // TODO(mattcarroll): Button press dynamics need overhaul for iOS:
+      //  https://github.com/flutter/flutter/issues/19786
       child: GestureDetector(
         excludeFromSemantics: true,
         behavior: HitTestBehavior.opaque,
         onTapDown: (TapDownDetails details) => setState(() => _isPressed = true),
         onTapUp: (TapUpDetails details) => setState(() => _isPressed = false),
-        // TODO(mattcarroll): Cancel is currently triggered when user moves past slop instead of off button: https://github.com/flutter/flutter/issues/19783
+        // TODO(mattcarroll): Cancel is currently triggered when user moves past
+        //  slop instead of off button: https://github.com/flutter/flutter/issues/19783
         onTapCancel: () => setState(() => _isPressed = false),
         child: widget.child,
       ),

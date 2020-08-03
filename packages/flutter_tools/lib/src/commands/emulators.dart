@@ -33,7 +33,7 @@ class EmulatorsCommand extends FlutterCommand {
 
   @override
   Future<FlutterCommandResult> runCommand() async {
-    if (doctor.workflows.every((Workflow w) => !w.canListEmulators)) {
+    if (globals.doctor.workflows.every((Workflow w) => !w.canListEmulators)) {
       throwToolExit(
           'Unable to find any emulator sources. Please ensure you have some\n'
               'Android AVD images ' +
@@ -104,7 +104,7 @@ class EmulatorsCommand extends FlutterCommand {
 
   void _printEmulatorList(List<Emulator> emulators, String message) {
     globals.printStatus('$message\n');
-    Emulator.printEmulators(emulators);
+    Emulator.printEmulators(emulators, globals.logger);
     _printAdditionalInfo(showCreateInstruction: true, showRunInstruction: true);
   }
 

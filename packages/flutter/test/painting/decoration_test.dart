@@ -2,6 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+// @dart = 2.8
+
 @TestOn('!chrome')
 import 'dart:async';
 import 'dart:typed_data';
@@ -122,6 +124,21 @@ void main() {
 
     c = Decoration.lerp(a, b, 1.0) as BoxDecoration;
     expect(c.color, equals(b.color));
+  });
+
+  test('Decoration equality', () {
+    const BoxDecoration a = BoxDecoration(
+      color: Color(0xFFFFFFFF),
+      boxShadow: <BoxShadow>[BoxShadow()],
+    );
+
+    const BoxDecoration b = BoxDecoration(
+      color: Color(0xFFFFFFFF),
+      boxShadow: <BoxShadow>[BoxShadow()],
+    );
+
+    expect(a.hashCode, equals(b.hashCode));
+    expect(a, equals(b));
   });
 
   test('BoxDecorationImageListenerSync', () {
@@ -279,7 +296,7 @@ void main() {
       '   direction provided in the ImageConfiguration object to match.\n'
       '   The DecorationImage was:\n'
       '     DecorationImage(SynchronousTestImageProvider(), center, match\n'
-      '     text direction)\n'
+      '     text direction, scale: 1.0)\n'
       '   The ImageConfiguration was:\n'
       '     ImageConfiguration(size: Size(100.0, 100.0))\n'
     );
@@ -534,7 +551,7 @@ void main() {
     // sourceRect should contain all pixels of the source image
     expect(call.positionalArguments[1], Offset.zero & imageSize);
 
-    // Image should be scaled down to fit in hejght
+    // Image should be scaled down to fit in height
     // and be positioned in the bottom right of the outputRect
     const Size expectedTileSize = Size(20.0, 20.0);
     final Rect expectedTileRect = Rect.fromPoints(
@@ -582,5 +599,35 @@ void main() {
       // Image should be positioned in the center of the container
       expect(call.positionalArguments[2].center, outputRect.center);
     }
+  });
+
+  test('scale cannot be null in DecorationImage', () {
+    try {
+      DecorationImage(scale: null, image: SynchronousTestImageProvider());
+    } on AssertionError catch (error) {
+      expect(error.toString(), contains('scale != null'));
+      expect(error.toString(), contains('is not true'));
+      return;
+    }
+    fail('DecorationImage did not throw AssertionError when scale was null');
+  });
+
+  test('DecorationImage scale test', () {
+    final DecorationImage backgroundImage = DecorationImage(
+      image: SynchronousTestImageProvider(),
+      scale: 4,
+      alignment: Alignment.topLeft
+    );
+
+    final BoxDecoration boxDecoration = BoxDecoration(image: backgroundImage);
+    final BoxPainter boxPainter = boxDecoration.createBoxPainter(() { assert(false); });
+    final TestCanvas canvas = TestCanvas(<Invocation>[]);
+    boxPainter.paint(canvas, Offset.zero, const ImageConfiguration(size: Size(100.0, 100.0)));
+
+    final Invocation call = canvas.invocations.firstWhere((Invocation call) => call.memberName == #drawImageRect);
+    // The image should scale down to Size(25.0, 25.0) from Size(100.0, 100.0)
+    // considering DecorationImage scale to be 4.0 and Image scale to be 1.0.
+    expect(call.positionalArguments[2].size, const Size(25.0, 25.0));
+    expect(call.positionalArguments[2], const Rect.fromLTRB(0.0, 0.0, 25.0, 25.0));
   });
 }

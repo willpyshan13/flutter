@@ -9,11 +9,15 @@ import 'package:flutter/scheduler.dart' show timeDilation;
 
 void main() {
   runApp(
-    PlatformViewApp()
+    const PlatformViewApp()
   );
 }
 
 class PlatformViewApp extends StatefulWidget {
+  const PlatformViewApp({
+    Key key
+  }) : super(key: key);
+
   @override
   PlatformViewAppState createState() => PlatformViewAppState();
 
@@ -36,7 +40,6 @@ class PlatformViewAppState extends State<PlatformViewApp> {
     });
   }
 }
-
 
 class PlatformViewLayout extends StatelessWidget {
   const PlatformViewLayout({ Key key }) : super(key: key);
@@ -74,7 +77,7 @@ class DummyPlatformView extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     const String viewType = 'benchmarks/platform_views_layout/DummyPlatformView';
-    StatefulWidget nativeView;
+    Widget nativeView;
     if (Platform.isIOS) {
       nativeView = const UiKitView(
         viewType: viewType,

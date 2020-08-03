@@ -2,7 +2,6 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import 'package:platform/platform.dart';
 import 'package:process/process.dart';
 
 import 'android/android_sdk.dart';
@@ -17,11 +16,16 @@ import 'base/io.dart';
 import 'base/logger.dart';
 import 'base/net.dart';
 import 'base/os.dart';
+import 'base/platform.dart';
+import 'base/signals.dart';
 import 'base/template.dart';
 import 'base/terminal.dart';
+import 'base/time.dart';
 import 'base/user_messages.dart';
 import 'build_system/build_system.dart';
 import 'cache.dart';
+import 'device.dart';
+import 'doctor.dart';
 import 'fuchsia/fuchsia_sdk.dart';
 import 'ios/ios_workflow.dart';
 import 'ios/plist_parser.dart';
@@ -33,34 +37,41 @@ import 'persistent_tool_state.dart';
 import 'project.dart';
 import 'reporting/reporting.dart';
 import 'version.dart';
-import 'web/chrome.dart';
 
 Artifacts get artifacts => context.get<Artifacts>();
 BuildSystem get buildSystem => context.get<BuildSystem>();
 Cache get cache => context.get<Cache>();
 Config get config => context.get<Config>();
+CrashReporter get crashReporter => context.get<CrashReporter>();
+Doctor get doctor => context.get<Doctor>();
+HttpClientFactory get httpClientFactory => context.get<HttpClientFactory>();
 Logger get logger => context.get<Logger>();
 OperatingSystemUtils get os => context.get<OperatingSystemUtils>();
 PersistentToolState get persistentToolState => PersistentToolState.instance;
+Signals get signals => context.get<Signals>() ?? LocalSignals.instance;
 Usage get flutterUsage => context.get<Usage>();
-FlutterProjectFactory get projectFactory => context.get<FlutterProjectFactory>() ?? FlutterProjectFactory();
+DeviceManager get deviceManager => context.get<DeviceManager>();
 
-const FileSystem _kLocalFs = LocalFileSystem();
+FlutterProjectFactory get projectFactory {
+  return context.get<FlutterProjectFactory>() ?? FlutterProjectFactory(
+    logger: logger,
+    fileSystem: fs,
+  );
+}
 
 /// Currently active implementation of the file system.
 ///
 /// By default it uses local disk-based implementation. Override this in tests
 /// with [MemoryFileSystem].
 FileSystem get fs => ErrorHandlingFileSystem(
-  context.get<FileSystem>() ?? _kLocalFs,
-);
-
-final FileSystemUtils _defaultFileSystemUtils = FileSystemUtils(
-  fileSystem: fs,
+  delegate: context.get<FileSystem>() ?? LocalFileSystem.instance,
   platform: platform,
 );
 
-FileSystemUtils get fsUtils => context.get<FileSystemUtils>() ?? _defaultFileSystemUtils;
+FileSystemUtils get fsUtils => context.get<FileSystemUtils>() ?? FileSystemUtils(
+  fileSystem: fs,
+  platform: platform,
+);
 
 const ProcessManager _kLocalProcessManager = LocalProcessManager();
 
@@ -96,6 +107,9 @@ final BotDetector _defaultBotDetector = BotDetector(
 BotDetector get botDetector => context.get<BotDetector>() ?? _defaultBotDetector;
 
 Future<bool> get isRunningOnBot => botDetector.isRunningOnBot;
+
+/// The current system clock instance.
+SystemClock get systemClock => context.get<SystemClock>();
 
 /// Display an error level message to the user. Commands should use this if they
 /// fail in some way.
@@ -176,9 +190,6 @@ PlistParser get plistParser => context.get<PlistParser>() ?? (
     logger: logger,
 ));
 PlistParser _plistInstance;
-
-/// The [ChromeLauncher] instance.
-ChromeLauncher get chromeLauncher => context.get<ChromeLauncher>();
 
 /// The global template renderer
 TemplateRenderer get templateRenderer => context.get<TemplateRenderer>();

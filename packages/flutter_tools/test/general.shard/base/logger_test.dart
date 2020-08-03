@@ -5,17 +5,19 @@
 import 'dart:async';
 import 'dart:convert' show jsonEncode;
 
-import 'package:platform/platform.dart';
+import 'package:flutter_tools/executable.dart';
 import 'package:flutter_tools/src/base/io.dart';
 import 'package:flutter_tools/src/base/logger.dart';
+import 'package:flutter_tools/src/base/platform.dart';
 import 'package:flutter_tools/src/base/terminal.dart';
+import 'package:flutter_tools/src/commands/daemon.dart';
 import 'package:mockito/mockito.dart';
 import 'package:quiver/testing/async.dart';
 
 import '../../src/common.dart';
 import '../../src/mocks.dart' as mocks;
 
-final Platform _kNoAnsiPlatform = FakePlatform.fromPlatform(const LocalPlatform())..stdoutSupportsAnsi = false;
+final Platform _kNoAnsiPlatform = FakePlatform(stdoutSupportsAnsi: false);
 final String red = RegExp.escape(AnsiTerminal.red);
 final String bold = RegExp.escape(AnsiTerminal.bold);
 final String resetBold = RegExp.escape(AnsiTerminal.resetBold);
@@ -24,6 +26,52 @@ final String resetColor = RegExp.escape(AnsiTerminal.resetColor);
 class MockStdout extends Mock implements Stdout {}
 
 void main() {
+  testWithoutContext('correct logger instance is created', () {
+    final LoggerFactory loggerFactory = LoggerFactory(
+      terminal: Terminal.test(),
+      stdio: mocks.MockStdio(),
+      outputPreferences: OutputPreferences.test(),
+      timeoutConfiguration: const TimeoutConfiguration(),
+    );
+
+    expect(loggerFactory.createLogger(
+      verbose: false,
+      machine: false,
+      daemon: false,
+      windows: false,
+    ), isA<StdoutLogger>());
+    expect(loggerFactory.createLogger(
+      verbose: false,
+      machine: false,
+      daemon: false,
+      windows: true,
+    ), isA<WindowsStdoutLogger>());
+    expect(loggerFactory.createLogger(
+      verbose: true,
+      machine: false,
+      daemon: false,
+      windows: true,
+    ), isA<VerboseLogger>());
+    expect(loggerFactory.createLogger(
+      verbose: true,
+      machine: false,
+      daemon: false,
+      windows: false,
+    ), isA<VerboseLogger>());
+    expect(loggerFactory.createLogger(
+      verbose: false,
+      machine: false,
+      daemon: true,
+      windows: false,
+    ), isA<NotifyingLogger>());
+    expect(loggerFactory.createLogger(
+      verbose: false,
+      machine: true,
+      daemon: false,
+      windows: false,
+    ), isA<AppRunLogger>());
+  });
+
   group('AppContext', () {
     FakeStopwatch fakeStopWatch;
 
@@ -54,7 +102,7 @@ void main() {
       final BufferLogger mockLogger = BufferLogger(
         terminal: AnsiTerminal(
           stdio:  mocks.MockStdio(),
-          platform: FakePlatform()..stdoutSupportsAnsi = true,
+          platform: FakePlatform(stdoutSupportsAnsi: true),
         ),
         outputPreferences: OutputPreferences.test(showColor: true),
       );
@@ -250,8 +298,8 @@ void main() {
         AnsiStatus ansiStatus;
 
         setUp(() {
-          platform = FakePlatform.fromPlatform(testPlatform)..stdoutSupportsAnsi = false;
-          ansiPlatform = FakePlatform.fromPlatform(testPlatform)..stdoutSupportsAnsi = true;
+          platform = FakePlatform(stdoutSupportsAnsi: false);
+          ansiPlatform = FakePlatform(stdoutSupportsAnsi: true);
 
           terminal = AnsiTerminal(
             stdio: mockStdio,
@@ -482,8 +530,8 @@ void main() {
             expect(lines[1], equals(''));
 
             // Verify that stopping or canceling multiple times throws.
-            expect(() { ansiStatus.cancel(); }, throwsAssertionError);
-            expect(() { ansiStatus.stop(); }, throwsAssertionError);
+            expect(ansiStatus.cancel, throwsAssertionError);
+            expect(ansiStatus.stop, throwsAssertionError);
             done = true;
           });
           expect(done, isTrue);
@@ -749,7 +797,7 @@ void main() {
       final Logger logger = StdoutLogger(
         terminal: AnsiTerminal(
           stdio: mockStdio,
-          platform: FakePlatform()..stdoutSupportsAnsi = true,
+          platform: FakePlatform(stdoutSupportsAnsi: true),
         ),
         stdio: mockStdio,
         outputPreferences: OutputPreferences.test(showColor: true),

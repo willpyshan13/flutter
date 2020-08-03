@@ -2,9 +2,10 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+// @dart = 2.8
+
 import 'dart:collection';
 
-import 'package:collection/collection.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
@@ -77,11 +78,12 @@ class KeySet<T extends KeyboardKey> {
         assert(!keys.contains(null)),
         _keys = HashSet<T>.from(keys);
 
-  /// Returns an unmodifiable view of the [KeyboardKey]s in this [KeySet].
-  Set<T> get keys => UnmodifiableSetView<T>(_keys);
+  /// Returns a copy of the [KeyboardKey]s in this [KeySet].
+  Set<T> get keys => _keys.toSet();
   final HashSet<T> _keys;
 
   @override
+  // ignore: avoid_equals_and_hash_code_on_mutable_classes, to remove in NNBD with a late final hashcode
   bool operator ==(Object other) {
     if (other.runtimeType != runtimeType) {
       return false;
@@ -99,6 +101,7 @@ class KeySet<T extends KeyboardKey> {
   int _hashCode;
 
   @override
+  // ignore: avoid_equals_and_hash_code_on_mutable_classes, to remove in NNBD with a late final hashcode
   int get hashCode {
     // Return cached hash code if available.
     if (_hashCode != null) {
@@ -269,10 +272,11 @@ class ShortcutManager extends ChangeNotifier with Diagnosticable {
   ///
   /// When the map is changed, listeners to this manager will be notified.
   ///
-  /// The returned [LogicalKeyMap] should not be modified.
+  /// The returned map should not be modified.
   Map<LogicalKeySet, Intent> get shortcuts => _shortcuts;
   Map<LogicalKeySet, Intent> _shortcuts;
   set shortcuts(Map<LogicalKeySet, Intent> value) {
+    assert(value != null);
     if (!mapEquals<LogicalKeySet, Intent>(_shortcuts, value)) {
       _shortcuts = value;
       notifyListeners();
@@ -284,6 +288,14 @@ class ShortcutManager extends ChangeNotifier with Diagnosticable {
   /// The optional `keysPressed` argument provides an override to keys that the
   /// [RawKeyboard] reports. If not specified, uses [RawKeyboard.keysPressed]
   /// instead.
+  ///
+  /// If a key mapping is found, then the associated action will be invoked
+  /// using the [Intent] that the [LogicalKeySet] maps to, and the currently
+  /// focused widget's context (from [FocusManager.primaryFocus]).
+  ///
+  /// The object returned is the result of [Action.invoke] being called on the
+  /// [Action] bound to the [Intent] that the key press maps to, or null, if the
+  /// key press didn't match any intent.
   @protected
   bool handleKeypress(
     BuildContext context,
@@ -314,10 +326,9 @@ class ShortcutManager extends ChangeNotifier with Diagnosticable {
     }
     if (matchedIntent != null) {
       final BuildContext primaryContext = primaryFocus?.context;
-      if (primaryContext == null) {
-        return false;
-      }
-      return Actions.invoke(primaryContext, matchedIntent, nullOk: true);
+      assert (primaryContext != null);
+      Actions.invoke(primaryContext, matchedIntent, nullOk: true);
+      return true;
     }
     return false;
   }
@@ -340,16 +351,18 @@ class ShortcutManager extends ChangeNotifier with Diagnosticable {
 ///    invoked.
 ///  * [Action], a class for defining an invocation of a user action.
 class Shortcuts extends StatefulWidget {
-  /// Creates a ActionManager object.
+  /// Creates a const [Shortcuts] widget.
   ///
-  /// The [child] argument must not be null.
+  /// The [child] and [shortcuts] arguments are required and must not be null.
   const Shortcuts({
     Key key,
     this.manager,
-    this.shortcuts,
-    this.child,
+    @required this.shortcuts,
+    @required this.child,
     this.debugLabel,
-  }) : super(key: key);
+  }) : assert(shortcuts != null),
+       assert(child != null),
+       super(key: key);
 
   /// The [ShortcutManager] that will manage the mapping between key
   /// combinations and [Action]s.

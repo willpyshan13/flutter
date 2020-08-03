@@ -2,6 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+// @dart = 2.8
+
 import 'dart:ui' as ui show BoxHeightStyle, BoxWidthStyle;
 
 import 'package:flutter/gestures.dart';
@@ -241,6 +243,7 @@ class CupertinoTextField extends StatefulWidget {
     ToolbarOptions toolbarOptions,
     this.showCursor,
     this.autofocus = false,
+    this.obscuringCharacter = '•',
     this.obscureText = false,
     this.autocorrect = true,
     SmartDashesType smartDashesType,
@@ -257,6 +260,7 @@ class CupertinoTextField extends StatefulWidget {
     this.inputFormatters,
     this.enabled,
     this.cursorWidth = 2.0,
+    this.cursorHeight,
     this.cursorRadius = const Radius.circular(2.0),
     this.cursorColor,
     this.selectionHeightStyle = ui.BoxHeightStyle.tight,
@@ -268,9 +272,11 @@ class CupertinoTextField extends StatefulWidget {
     this.onTap,
     this.scrollController,
     this.scrollPhysics,
+    this.autofillHints,
   }) : assert(textAlign != null),
        assert(readOnly != null),
        assert(autofocus != null),
+       assert(obscuringCharacter != null && obscuringCharacter.length == 1),
        assert(obscureText != null),
        assert(autocorrect != null),
        smartDashesType = smartDashesType ?? (obscureText ? SmartDashesType.disabled : SmartDashesType.enabled),
@@ -297,6 +303,11 @@ class CupertinoTextField extends StatefulWidget {
        assert(clearButtonMode != null),
        assert(prefixMode != null),
        assert(suffixMode != null),
+       // Assert the following instead of setting it directly to avoid surprising the user by silently changing the value they set.
+       assert(!identical(textInputAction, TextInputAction.newline) ||
+         maxLines == 1 ||
+         !identical(keyboardType, TextInputType.text),
+         'Use keyboardType TextInputType.multiline when using TextInputAction.newline on a multiline TextField.'),
        keyboardType = keyboardType ?? (maxLines == 1 ? TextInputType.text : TextInputType.multiline),
        toolbarOptions = toolbarOptions ?? (obscureText ?
          const ToolbarOptions(
@@ -427,6 +438,9 @@ class CupertinoTextField extends StatefulWidget {
   /// {@macro flutter.widgets.editableText.autofocus}
   final bool autofocus;
 
+  /// {@macro flutter.widgets.editableText.obscuringCharacter}
+  final String obscuringCharacter;
+
   /// {@macro flutter.widgets.editableText.obscureText}
   final bool obscureText;
 
@@ -531,6 +545,9 @@ class CupertinoTextField extends StatefulWidget {
   /// {@macro flutter.widgets.editableText.cursorWidth}
   final double cursorWidth;
 
+  /// {@macro flutter.widgets.editableText.cursorHeight}
+  final double cursorHeight;
+
   /// {@macro flutter.widgets.editableText.cursorRadius}
   final Radius cursorRadius;
 
@@ -579,6 +596,10 @@ class CupertinoTextField extends StatefulWidget {
   /// {@macro flutter.material.textfield.onTap}
   final GestureTapCallback onTap;
 
+  /// {@macro flutter.widgets.editableText.autofillHints}
+  /// {@macro flutter.services.autofill.autofillHints}
+  final Iterable<String> autofillHints;
+
   @override
   _CupertinoTextFieldState createState() => _CupertinoTextFieldState();
 
@@ -597,6 +618,7 @@ class CupertinoTextField extends StatefulWidget {
     properties.add(DiagnosticsProperty<TextInputType>('keyboardType', keyboardType, defaultValue: TextInputType.text));
     properties.add(DiagnosticsProperty<TextStyle>('style', style, defaultValue: null));
     properties.add(DiagnosticsProperty<bool>('autofocus', autofocus, defaultValue: false));
+    properties.add(DiagnosticsProperty<String>('obscuringCharacter', obscuringCharacter, defaultValue: '•'));
     properties.add(DiagnosticsProperty<bool>('obscureText', obscureText, defaultValue: false));
     properties.add(DiagnosticsProperty<bool>('autocorrect', autocorrect, defaultValue: true));
     properties.add(EnumProperty<SmartDashesType>('smartDashesType', smartDashesType, defaultValue: obscureText ? SmartDashesType.disabled : SmartDashesType.enabled));
@@ -607,6 +629,9 @@ class CupertinoTextField extends StatefulWidget {
     properties.add(DiagnosticsProperty<bool>('expands', expands, defaultValue: false));
     properties.add(IntProperty('maxLength', maxLength, defaultValue: null));
     properties.add(FlagProperty('maxLengthEnforced', value: maxLengthEnforced, ifTrue: 'max length enforced'));
+    properties.add(DoubleProperty('cursorWidth', cursorWidth, defaultValue: 2.0));
+    properties.add(DoubleProperty('cursorHeight', cursorHeight, defaultValue: null));
+    properties.add(DiagnosticsProperty<Radius>('cursorRadius', cursorRadius, defaultValue: null));
     properties.add(createCupertinoColorProperty('cursorColor', cursorColor, defaultValue: null));
     properties.add(FlagProperty('selectionEnabled', value: selectionEnabled, defaultValue: true, ifFalse: 'selection disabled'));
     properties.add(DiagnosticsProperty<ScrollController>('scrollController', scrollController, defaultValue: null));
@@ -897,6 +922,8 @@ class _CupertinoTextFieldState extends State<CupertinoTextField> with AutomaticK
       color: enabled ? decorationColor : (decorationColor ?? disabledColor),
     );
 
+    final Color selectionColor = CupertinoTheme.of(context).primaryColor.withOpacity(0.2);
+
     final Widget paddedEditable = Padding(
       padding: widget.padding,
       child: RepaintBoundary(
@@ -915,6 +942,7 @@ class _CupertinoTextFieldState extends State<CupertinoTextField> with AutomaticK
           strutStyle: widget.strutStyle,
           textAlign: widget.textAlign,
           autofocus: widget.autofocus,
+          obscuringCharacter: widget.obscuringCharacter,
           obscureText: widget.obscureText,
           autocorrect: widget.autocorrect,
           smartDashesType: widget.smartDashesType,
@@ -923,7 +951,7 @@ class _CupertinoTextFieldState extends State<CupertinoTextField> with AutomaticK
           maxLines: widget.maxLines,
           minLines: widget.minLines,
           expands: widget.expands,
-          selectionColor: CupertinoTheme.of(context).primaryColor.withOpacity(0.2),
+          selectionColor: selectionColor,
           selectionControls: widget.selectionEnabled
             ? cupertinoTextSelectionControls : null,
           onChanged: widget.onChanged,
@@ -933,11 +961,13 @@ class _CupertinoTextFieldState extends State<CupertinoTextField> with AutomaticK
           inputFormatters: formatters,
           rendererIgnoresPointer: true,
           cursorWidth: widget.cursorWidth,
+          cursorHeight: widget.cursorHeight,
           cursorRadius: widget.cursorRadius,
           cursorColor: cursorColor,
           cursorOpacityAnimates: true,
           cursorOffset: cursorOffset,
           paintCursorAboveText: true,
+          autocorrectionTextRectColor: selectionColor,
           backgroundCursorColor: CupertinoDynamicColor.resolve(CupertinoColors.inactiveGray, context),
           selectionHeightStyle: widget.selectionHeightStyle,
           selectionWidthStyle: widget.selectionWidthStyle,
@@ -947,6 +977,7 @@ class _CupertinoTextFieldState extends State<CupertinoTextField> with AutomaticK
           scrollController: widget.scrollController,
           scrollPhysics: widget.scrollPhysics,
           enableInteractiveSelection: widget.enableInteractiveSelection,
+          autofillHints: widget.autofillHints,
         ),
       ),
     );

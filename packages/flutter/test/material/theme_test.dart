@@ -2,6 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+// @dart = 2.8
+
 import 'dart:ui' as ui;
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
@@ -162,7 +164,7 @@ void main() {
             body: Center(
               child: Builder(
                 builder: (BuildContext context) {
-                  return RaisedButton(
+                  return ElevatedButton(
                     onPressed: () {
                       showModalBottomSheet<void>(
                         context: context,
@@ -199,7 +201,7 @@ void main() {
             body: Center(
               child: Builder(
                 builder: (BuildContext context) {
-                  return RaisedButton(
+                  return ElevatedButton(
                     onPressed: () {
                       showDialog<void>(
                         context: context,
@@ -774,12 +776,17 @@ class _TextStyleProxy implements TextStyle {
     double fontSizeFactor = 1.0,
     double fontSizeDelta = 0.0,
     int fontWeightDelta = 0,
+    FontStyle fontStyle,
     double letterSpacingFactor = 1.0,
     double letterSpacingDelta = 0.0,
     double wordSpacingFactor = 1.0,
     double wordSpacingDelta = 0.0,
     double heightFactor = 1.0,
     double heightDelta = 0.0,
+    TextBaseline textBaseline,
+    Locale locale,
+    List<ui.Shadow> shadows,
+    List<ui.FontFeature> fontFeatures,
   }) {
     throw UnimplementedError();
   }

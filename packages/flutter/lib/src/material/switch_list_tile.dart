@@ -2,6 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+// @dart = 2.8
+
 import 'package:flutter/widgets.dart';
 
 import 'list_tile.dart';
@@ -39,9 +41,8 @@ enum _SwitchListTileType { material, adaptive }
 /// appear selected when the switch is on, pass the same value to both.
 ///
 /// The switch is shown on the right by default in left-to-right languages (i.e.
-/// in the [ListTile.trailing] slot). The [secondary] widget is placed in the
-/// [ListTile.leading] slot. This cannot be changed; there is not sufficient
-/// space in a [ListTile]'s [ListTile.leading] slot for a [Switch].
+/// in the [ListTile.trailing] slot) which can be changed using [controlAffinity].
+/// The [secondary] widget is placed in the [ListTile.leading] slot.
 ///
 /// To show the [SwitchListTile] as disabled, pass null as the [onChanged]
 /// callback.
@@ -272,11 +273,14 @@ class SwitchListTile extends StatelessWidget {
     this.contentPadding,
     this.secondary,
     this.selected = false,
+    this.autofocus = false,
+    this.controlAffinity = ListTileControlAffinity.platform,
   }) : _switchListTileType = _SwitchListTileType.material,
        assert(value != null),
        assert(isThreeLine != null),
        assert(!isThreeLine || subtitle != null),
        assert(selected != null),
+       assert(autofocus != null),
        super(key: key);
 
   /// Creates the wrapped switch with [Switch.adaptive].
@@ -286,7 +290,7 @@ class SwitchListTile extends StatelessWidget {
   ///
   /// If a [CupertinoSwitch] is created, the following parameters are
   /// ignored: [activeTrackColor], [inactiveThumbColor], [inactiveTrackColor],
-  /// [activeThumbImage], [inactiveThumbImage], [materialTapTargetSize].
+  /// [activeThumbImage], [inactiveThumbImage].
   const SwitchListTile.adaptive({
     Key key,
     @required this.value,
@@ -304,11 +308,14 @@ class SwitchListTile extends StatelessWidget {
     this.contentPadding,
     this.secondary,
     this.selected = false,
+    this.autofocus = false,
+    this.controlAffinity = ListTileControlAffinity.platform,
   }) : _switchListTileType = _SwitchListTileType.adaptive,
        assert(value != null),
        assert(isThreeLine != null),
        assert(!isThreeLine || subtitle != null),
        assert(selected != null),
+       assert(autofocus != null),
        super(key: key);
 
   /// Whether this switch is checked.
@@ -419,8 +426,16 @@ class SwitchListTile extends StatelessWidget {
   /// Normally, this property is left to its default value, false.
   final bool selected;
 
+  /// {@macro flutter.widgets.Focus.autofocus}
+  final bool autofocus;
+
   /// If adaptive, creates the switch with [Switch.adaptive].
   final _SwitchListTileType _switchListTileType;
+
+  /// Defines the position of control and [secondary], relative to text.
+  ///
+  /// By default, the value of `controlAffinity` is [ListTileControlAffinity.platform].
+  final ListTileControlAffinity controlAffinity;
 
   @override
   Widget build(BuildContext context) {
@@ -437,6 +452,7 @@ class SwitchListTile extends StatelessWidget {
           activeTrackColor: activeTrackColor,
           inactiveTrackColor: inactiveTrackColor,
           inactiveThumbColor: inactiveThumbColor,
+          autofocus: autofocus,
         );
         break;
 
@@ -451,22 +467,38 @@ class SwitchListTile extends StatelessWidget {
           activeTrackColor: activeTrackColor,
           inactiveTrackColor: inactiveTrackColor,
           inactiveThumbColor: inactiveThumbColor,
+          autofocus: autofocus,
         );
     }
+
+    Widget leading, trailing;
+    switch (controlAffinity) {
+      case ListTileControlAffinity.leading:
+        leading = control;
+        trailing = secondary;
+        break;
+      case ListTileControlAffinity.trailing:
+      case ListTileControlAffinity.platform:
+        leading = secondary;
+        trailing = control;
+        break;
+    }
+
     return MergeSemantics(
       child: ListTileTheme.merge(
         selectedColor: activeColor ?? Theme.of(context).accentColor,
         child: ListTile(
-          leading: secondary,
+          leading: leading,
           title: title,
           subtitle: subtitle,
-          trailing: control,
+          trailing: trailing,
           isThreeLine: isThreeLine,
           dense: dense,
           contentPadding: contentPadding,
           enabled: onChanged != null,
           onTap: onChanged != null ? () { onChanged(!value); } : null,
           selected: selected,
+          autofocus: autofocus,
         ),
       ),
     );

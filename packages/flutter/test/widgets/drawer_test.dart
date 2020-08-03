@@ -2,6 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+// @dart = 2.8
+
 import 'dart:ui';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -97,7 +99,7 @@ void main() {
               onEnter: (_) { logs.add('enter'); },
               onHover: (_) { logs.add('hover'); },
               onExit: (_) { logs.add('exit'); },
-              child: Container(width: 10, height: 10),
+              child: const SizedBox(width: 10, height: 10),
             ),
           ),
         ),
@@ -268,7 +270,7 @@ void main() {
                 child: ListView(
                   children: <Widget>[
                     const Text('drawer'),
-                    FlatButton(
+                    TextButton(
                       child: const Text('close'),
                       onPressed: () => Navigator.pop(context),
                     ),
@@ -276,7 +278,7 @@ void main() {
                 ),
               ),
               body: Container(
-                child: FlatButton(
+                child: TextButton(
                   child: const Text('button'),
                   onPressed: () { buttonPressed = true; },
                 ),

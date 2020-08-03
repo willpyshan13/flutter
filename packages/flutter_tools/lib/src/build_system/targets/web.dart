@@ -3,18 +3,19 @@
 // found in the LICENSE file.
 
 import 'package:crypto/crypto.dart';
+import 'package:package_config/package_config.dart';
 
 import '../../artifacts.dart';
 import '../../base/file_system.dart';
 import '../../base/io.dart';
 import '../../build_info.dart';
-import '../../compile.dart';
 import '../../dart/package_map.dart';
 import '../../globals.dart' as globals;
 import '../build_system.dart';
 import '../depfile.dart';
 import 'assets.dart';
-import 'dart.dart';
+import 'common.dart';
+import 'localizations.dart';
 
 /// Whether web builds should call the platform initialization logic.
 const String kInitializePlatform = 'InitializePlatform';
@@ -56,35 +57,35 @@ class WebEntrypointTarget extends Target {
     final String targetFile = environment.defines[kTargetFile];
     final bool shouldInitializePlatform = environment.defines[kInitializePlatform] == 'true';
     final bool hasPlugins = environment.defines[kHasWebPlugins] == 'true';
-    final String importPath = globals.fs.path.absolute(targetFile);
+    final Uri importUri = environment.fileSystem.file(targetFile).absolute.uri;
+    // TODO(jonahwilliams): support configuration of this file.
+    const String packageFile = '.packages';
+    final PackageConfig packageConfig = await loadPackageConfigWithLogging(
+      environment.fileSystem.file(packageFile),
+      logger: environment.logger,
+    );
 
-    // Use the package uri mapper to find the correct package-scheme import path
+    // Use the PackageConfig to find the correct package-scheme import path
     // for the user application. If the application has a mix of package-scheme
     // and relative imports for a library, then importing the entrypoint as a
     // file-scheme will cause said library to be recognized as two distinct
     // libraries. This can cause surprising behavior as types from that library
     // will be considered distinct from each other.
-    final PackageUriMapper packageUriMapper = PackageUriMapper(
-      importPath,
-      PackageMap.globalPackagesPath,
-      null,
-      null,
-    );
-
     // By construction, this will only be null if the .packages file does not
     // have an entry for the user's application or if the main file is
     // outside of the lib/ directory.
-    final String mainImport = packageUriMapper.map(importPath)?.toString()
-      ?? globals.fs.file(importPath).absolute.uri.toString();
+    final String mainImport = packageConfig.toPackageUri(importUri)?.toString()
+      ?? importUri.toString();
 
     String contents;
     if (hasPlugins) {
-      final String generatedPath = environment.projectDir
+      final Uri generatedUri = environment.projectDir
         .childDirectory('lib')
         .childFile('generated_plugin_registrant.dart')
-        .absolute.path;
-      final String generatedImport = packageUriMapper.map(generatedPath)?.toString()
-        ?? globals.fs.file(generatedPath).absolute.uri.toString();
+        .absolute
+        .uri;
+      final String generatedImport = packageConfig.toPackageUri(generatedUri)?.toString()
+        ?? generatedUri.toString();
       contents = '''
 import 'dart:ui' as ui;
 
@@ -129,7 +130,8 @@ class Dart2JSTarget extends Target {
 
   @override
   List<Target> get dependencies => const <Target>[
-    WebEntrypointTarget()
+    WebEntrypointTarget(),
+    GenerateLocalizationsTarget(),
   ];
 
   @override
@@ -151,51 +153,48 @@ class Dart2JSTarget extends Target {
 
   @override
   Future<void> build(Environment environment) async {
-    final String dart2jsOptimization = environment.defines[kDart2jsOptimization];
-    final bool csp = environment.defines[kCspMode] == 'true';
     final BuildMode buildMode = getBuildModeForName(environment.defines[kBuildMode]);
-    final String specPath = globals.fs.path.join(globals.artifacts.getArtifactPath(Artifact.flutterWebSdk), 'libraries.json');
-    final String packageFile = PackageMap.globalPackagesPath;
-    final File outputKernel = environment.buildDir.childFile('app.dill');
-    final File outputFile = environment.buildDir.childFile('main.dart.js');
-    final List<String> dartDefines = parseDartDefines(environment);
 
-    // Run the dart2js compilation in two stages, so that icon tree shaking can
-    // parse the kernel file for web builds.
-    final ProcessResult kernelResult = await globals.processManager.run(<String>[
+    final List<String> sharedCommandOptions = <String>[
       globals.artifacts.getArtifactPath(Artifact.engineDartBinary),
+      '--disable-dart-dev',
       globals.artifacts.getArtifactPath(Artifact.dart2jsSnapshot),
-      '--libraries-spec=$specPath',
-      '-o',
-      outputKernel.path,
-      '--packages=$packageFile',
-      '--cfe-only',
-      environment.buildDir.childFile('main.dart').path,
-    ]);
-    if (kernelResult.exitCode != 0) {
-      throw Exception(kernelResult.stdout + kernelResult.stderr);
-    }
-    final ProcessResult javaScriptResult = await globals.processManager.run(<String>[
-      globals.artifacts.getArtifactPath(Artifact.engineDartBinary),
-      globals.artifacts.getArtifactPath(Artifact.dart2jsSnapshot),
-      '--libraries-spec=$specPath',
-      if (dart2jsOptimization != null)
-        '-$dart2jsOptimization'
-      else
-        '-O4',
+      '--libraries-spec=${globals.fs.path.join(globals.artifacts.getArtifactPath(Artifact.flutterWebSdk), 'libraries.json')}',
+      ...?decodeDartDefines(environment.defines, kExtraFrontEndOptions),
       if (buildMode == BuildMode.profile)
         '-Ddart.vm.profile=true'
       else
         '-Ddart.vm.product=true',
-      for (final String dartDefine in dartDefines)
+      for (final String dartDefine in decodeDartDefines(environment.defines, kDartDefines))
         '-D$dartDefine',
-      if (buildMode == BuildMode.profile)
-        '--no-minify',
-      if (csp)
-        '--csp',
+    ];
+
+    // Run the dart2js compilation in two stages, so that icon tree shaking can
+    // parse the kernel file for web builds.
+    final ProcessResult kernelResult = await globals.processManager.run(<String>[
+      ...sharedCommandOptions,
       '-o',
-      outputFile.path,
       environment.buildDir.childFile('app.dill').path,
+      '--packages=.packages',
+      '--cfe-only',
+      environment.buildDir.childFile('main.dart').path, // dartfile
+    ]);
+    if (kernelResult.exitCode != 0) {
+      throw Exception(kernelResult.stdout + kernelResult.stderr);
+    }
+
+    final String dart2jsOptimization = environment.defines[kDart2jsOptimization];
+    final File outputJSFile = environment.buildDir.childFile('main.dart.js');
+    final bool csp = environment.defines[kCspMode] == 'true';
+
+    final ProcessResult javaScriptResult = await globals.processManager.run(<String>[
+      ...sharedCommandOptions,
+      if (dart2jsOptimization != null) '-$dart2jsOptimization' else '-O4',
+      if (buildMode == BuildMode.profile) '--no-minify',
+      if (csp) '--csp',
+      '-o',
+      outputJSFile.path,
+      environment.buildDir.childFile('app.dill').path, // dartfile
     ]);
     if (javaScriptResult.exitCode != 0) {
       throw Exception(javaScriptResult.stdout + javaScriptResult.stderr);
@@ -210,11 +209,10 @@ class Dart2JSTarget extends Target {
     final DepfileService depfileService = DepfileService(
       fileSystem: globals.fs,
       logger: globals.logger,
-      platform: globals.platform,
     );
     final Depfile depfile = depfileService.parseDart2js(
       environment.buildDir.childFile('app.dill.deps'),
-      outputFile,
+      outputJSFile,
     );
     depfileService.writeToFile(
       depfile,
@@ -270,11 +268,14 @@ class WebReleaseBundle extends Target {
     }
     final Directory outputDirectory = environment.outputDir.childDirectory('assets');
     outputDirectory.createSync(recursive: true);
-    final Depfile depfile = await copyAssets(environment, environment.outputDir.childDirectory('assets'));
+    final Depfile depfile = await copyAssets(
+      environment,
+      environment.outputDir.childDirectory('assets'),
+      targetPlatform: TargetPlatform.web_javascript,
+    );
     final DepfileService depfileService = DepfileService(
       fileSystem: globals.fs,
       logger: globals.logger,
-      platform: globals.platform,
     );
     depfileService.writeToFile(
       depfile,
@@ -344,7 +345,8 @@ class WebServiceWorker extends Target {
     final Map<String, String> urlToHash = <String, String>{};
     for (final File file in contents) {
       // Do not force caching of source maps.
-      if (file.path.endsWith('main.dart.js.map')) {
+      if (file.path.endsWith('main.dart.js.map') ||
+        file.path.endsWith('.part.js.map')) {
         continue;
       }
       final String url = globals.fs.path.toUri(
@@ -354,18 +356,30 @@ class WebServiceWorker extends Target {
         ).toString();
       final String hash = md5.convert(await file.readAsBytes()).toString();
       urlToHash[url] = hash;
+      // Add an additional entry for the base URL.
+      if (globals.fs.path.basename(url) == 'index.html') {
+        urlToHash['/'] = hash;
+      }
     }
 
     final File serviceWorkerFile = environment.outputDir
       .childFile('flutter_service_worker.js');
     final Depfile depfile = Depfile(contents, <File>[serviceWorkerFile]);
-    final String serviceWorker = generateServiceWorker(urlToHash);
+    final String serviceWorker = generateServiceWorker(urlToHash, <String>[
+      '/',
+      'main.dart.js',
+      'index.html',
+      'assets/NOTICES',
+      if (urlToHash.containsKey('assets/AssetManifest.json'))
+        'assets/AssetManifest.json',
+      if (urlToHash.containsKey('assets/FontManifest.json'))
+        'assets/FontManifest.json',
+    ]);
     serviceWorkerFile
       .writeAsStringSync(serviceWorker);
     final DepfileService depfileService = DepfileService(
       fileSystem: globals.fs,
       logger: globals.logger,
-      platform: globals.platform,
     );
     depfileService.writeToFile(
       depfile,
@@ -377,40 +391,153 @@ class WebServiceWorker extends Target {
 /// Generate a service worker with an app-specific cache name a map of
 /// resource files.
 ///
-/// We embed file hashes directly into the worker so that the byte for byte
+/// The tool embeds file hashes directly into the worker so that the byte for byte
 /// invalidation will automatically reactivate workers whenever a new
 /// version is deployed.
-// TODO(jonahwilliams): on re-activate, only evict stale assets.
-String generateServiceWorker(Map<String, String> resources) {
+String generateServiceWorker(Map<String, String> resources, List<String> coreBundle) {
   return '''
 'use strict';
+const MANIFEST = 'flutter-app-manifest';
+const TEMP = 'flutter-temp-cache';
 const CACHE_NAME = 'flutter-app-cache';
 const RESOURCES = {
   ${resources.entries.map((MapEntry<String, String> entry) => '"${entry.key}": "${entry.value}"').join(",\n")}
 };
 
-self.addEventListener('activate', function (event) {
-  event.waitUntil(
-    caches.keys().then(function (cacheName) {
-      return caches.delete(cacheName);
-    }).then(function (_) {
-      return caches.open(CACHE_NAME);
-    }).then(function (cache) {
-      return cache.addAll(Object.keys(RESOURCES));
+// The application shell files that are downloaded before a service worker can
+// start.
+const CORE = [
+  ${coreBundle.map((String file) => '"$file"').join(',\n')}];
+
+// During install, the TEMP cache is populated with the application shell files.
+self.addEventListener("install", (event) => {
+  return event.waitUntil(
+    caches.open(TEMP).then((cache) => {
+      // Provide a 'reload' param to ensure the latest version is downloaded.
+      return cache.addAll(CORE.map((value) => new Request(value, {'cache': 'reload'})));
     })
   );
 });
 
-self.addEventListener('fetch', function (event) {
-  event.respondWith(
-    caches.match(event.request)
-      .then(function (response) {
-        if (response) {
-          return response;
+// During activate, the cache is populated with the temp files downloaded in
+// install. If this service worker is upgrading from one with a saved
+// MANIFEST, then use this to retain unchanged resource files.
+self.addEventListener("activate", function(event) {
+  return event.waitUntil(async function() {
+    try {
+      var contentCache = await caches.open(CACHE_NAME);
+      var tempCache = await caches.open(TEMP);
+      var manifestCache = await caches.open(MANIFEST);
+      var manifest = await manifestCache.match('manifest');
+
+      // When there is no prior manifest, clear the entire cache.
+      if (!manifest) {
+        await caches.delete(CACHE_NAME);
+        contentCache = await caches.open(CACHE_NAME);
+        for (var request of await tempCache.keys()) {
+          var response = await tempCache.match(request);
+          await contentCache.put(request, response);
         }
-        return fetch(event.request);
+        await caches.delete(TEMP);
+        // Save the manifest to make future upgrades efficient.
+        await manifestCache.put('manifest', new Response(JSON.stringify(RESOURCES)));
+        return;
+      }
+
+      var oldManifest = await manifest.json();
+      var origin = self.location.origin;
+      for (var request of await contentCache.keys()) {
+        var key = request.url.substring(origin.length + 1);
+        if (key == "") {
+          key = "/";
+        }
+        // If a resource from the old manifest is not in the new cache, or if
+        // the MD5 sum has changed, delete it. Otherwise the resource is left
+        // in the cache and can be reused by the new service worker.
+        if (!RESOURCES[key] || RESOURCES[key] != oldManifest[key]) {
+          await contentCache.delete(request);
+        }
+      }
+      // Populate the cache with the app shell TEMP files, potentially overwriting
+      // cache files preserved above.
+      for (var request of await tempCache.keys()) {
+        var response = await tempCache.match(request);
+        await contentCache.put(request, response);
+      }
+      await caches.delete(TEMP);
+      // Save the manifest to make future upgrades efficient.
+      await manifestCache.put('manifest', new Response(JSON.stringify(RESOURCES)));
+      return;
+    } catch (err) {
+      // On an unhandled exception the state of the cache cannot be guaranteed.
+      console.error('Failed to upgrade service worker: ' + err);
+      await caches.delete(CACHE_NAME);
+      await caches.delete(TEMP);
+      await caches.delete(MANIFEST);
+    }
+  }());
+});
+
+// The fetch handler redirects requests for RESOURCE files to the service
+// worker cache.
+self.addEventListener("fetch", (event) => {
+  var origin = self.location.origin;
+  var key = event.request.url.substring(origin.length + 1);
+  // Redirect URLs to the index.html
+  if (event.request.url == origin || event.request.url.startsWith(origin + '/#')) {
+    key = '/';
+  }
+  // If the URL is not the RESOURCE list, skip the cache.
+  if (!RESOURCES[key]) {
+    return event.respondWith(fetch(event.request));
+  }
+  event.respondWith(caches.open(CACHE_NAME)
+    .then((cache) =>  {
+      return cache.match(event.request).then((response) => {
+        // Either respond with the cached resource, or perform a fetch and
+        // lazily populate the cache. Ensure the resources are not cached
+        // by the browser for longer than the service worker expects.
+        var modifiedRequest = new Request(event.request, {'cache': 'reload'});
+        return response || fetch(modifiedRequest).then((response) => {
+          cache.put(event.request, response.clone());
+          return response;
+        });
       })
+    })
   );
 });
+
+self.addEventListener('message', (event) => {
+  // SkipWaiting can be used to immediately activate a waiting service worker.
+  // This will also require a page refresh triggered by the main worker.
+  if (event.data === 'skipWaiting') {
+    return self.skipWaiting();
+  }
+
+  if (event.message === 'downloadOffline') {
+    downloadOffline();
+  }
+});
+
+// Download offline will check the RESOURCES for all files not in the cache
+// and populate them.
+async function downloadOffline() {
+  var resources = [];
+  var contentCache = await caches.open(CACHE_NAME);
+  var currentContent = {};
+  for (var request of await contentCache.keys()) {
+    var key = request.url.substring(origin.length + 1);
+    if (key == "") {
+      key = "/";
+    }
+    currentContent[key] = true;
+  }
+  for (var resourceKey in Object.keys(RESOURCES)) {
+    if (!currentContent[resourceKey]) {
+      resources.push(resourceKey);
+    }
+  }
+  return contentCache.addAll(resources);
+}
 ''';
 }

@@ -2,6 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+// @dart = 2.8
+
 import 'dart:ui' show lerpDouble;
 
 import 'package:flutter/foundation.dart';
@@ -46,6 +48,7 @@ enum SnackBarBehavior {
 ///
 ///  * [ThemeData], which describes the overall theme information for the
 ///    application.
+@immutable
 class SnackBarThemeData with Diagnosticable {
 
   /// Creates a theme that can be used for [ThemeData.snackBarTheme].
@@ -68,7 +71,8 @@ class SnackBarThemeData with Diagnosticable {
 
   /// Default value for [SnackBarAction.textColor].
   ///
-  /// If null, [SnackBarAction] defaults to [ThemeData.colorScheme.secondaryColor].
+  /// If null, [SnackBarAction] defaults to [ColorScheme.secondary] of
+  /// [ThemeData.colorScheme] .
   final Color actionTextColor;
 
   /// Default value for [SnackBarAction.disabledTextColor].

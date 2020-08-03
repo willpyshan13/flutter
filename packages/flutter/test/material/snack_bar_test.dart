@@ -2,9 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-// TODO(shihaohong): remove ignoring deprecated member use analysis
-// when Scaffold.shouldSnackBarIgnoreFABRect parameter is removed.
-// ignore_for_file: deprecated_member_use_from_same_package
+// @dart = 2.8
 
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
@@ -382,6 +380,129 @@ void main() {
     expect(renderModel.color, equals(darkTheme.colorScheme.onSurface));
   });
 
+  testWidgets('Snackbar margin can be customized', (WidgetTester tester) async {
+    const double padding = 20.0;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: Builder(
+              builder: (BuildContext context) {
+                return GestureDetector(
+                  onTap: () {
+                    Scaffold.of(context).showSnackBar(
+                      SnackBar(
+                        content: const Text('I am a snack bar.'),
+                        margin: const EdgeInsets.all(padding),
+                        behavior: SnackBarBehavior.floating,
+                      ),
+                    );
+                  },
+                  child: const Text('X'),
+                );
+              }
+          ),
+        ),
+      ),
+    );
+
+    await tester.tap(find.text('X'));
+    await tester.pump(); // start animation
+    await tester.pump(const Duration(milliseconds: 750));
+
+    final Finder materialFinder = find.descendant(
+      of: find.byType(SnackBar),
+      matching: find.byType(Material),
+    );
+    final Offset snackBarBottomLeft = tester.getBottomLeft(materialFinder);
+    final Offset snackBarBottomRight = tester.getBottomRight(materialFinder);
+    expect(snackBarBottomLeft.dx, padding);
+    expect(snackBarBottomLeft.dy, 600 - padding); // Device height is 600.
+    expect(snackBarBottomRight.dx, 800 - padding); // Device width is 800.
+  });
+
+  testWidgets('Snackbar padding can be customized', (WidgetTester tester) async {
+    const double padding = 20.0;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: Builder(
+              builder: (BuildContext context) {
+                return GestureDetector(
+                  onTap: () {
+                    Scaffold.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('I am a snack bar.'),
+                        padding: EdgeInsets.all(padding),
+                      ),
+                    );
+                  },
+                  child: const Text('X'),
+                );
+              }
+          ),
+        ),
+      ),
+    );
+
+    await tester.tap(find.text('X'));
+    await tester.pump(); // start animation
+    await tester.pump(const Duration(milliseconds: 750));
+
+    final Finder textFinder = find.text('I am a snack bar.');
+    final Finder materialFinder = find.descendant(
+      of: find.byType(SnackBar),
+      matching: find.byType(Material),
+    );
+    final Offset textBottomLeft = tester.getBottomLeft(textFinder);
+    final Offset textTopRight = tester.getTopRight(textFinder);
+    final Offset snackBarBottomLeft = tester.getBottomLeft(materialFinder);
+    final Offset snackBarTopRight = tester.getTopRight(materialFinder);
+    expect(textBottomLeft.dx - snackBarBottomLeft.dx, padding);
+    expect(snackBarTopRight.dx - textTopRight.dx, padding);
+    // The text is given a vertical padding of 14 already.
+    expect(snackBarBottomLeft.dy - textBottomLeft.dy, padding + 14);
+    expect(textTopRight.dy - snackBarTopRight.dy, padding + 14);
+  });
+
+  testWidgets('Snackbar width can be customized', (WidgetTester tester) async {
+    const double width = 200.0;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: Builder(
+              builder: (BuildContext context) {
+                return GestureDetector(
+                  onTap: () {
+                    Scaffold.of(context).showSnackBar(
+                      SnackBar(
+                        content: const Text('I am a snack bar.'),
+                        width: width,
+                        behavior: SnackBarBehavior.floating,
+                      ),
+                    );
+                  },
+                  child: const Text('X'),
+                );
+              }
+          ),
+        ),
+      ),
+    );
+
+    await tester.tap(find.text('X'));
+    await tester.pump(); // start animation
+    await tester.pump(const Duration(milliseconds: 750));
+
+    final Finder materialFinder = find.descendant(
+      of: find.byType(SnackBar),
+      matching: find.byType(Material),
+    );
+    final Offset snackBarBottomLeft = tester.getBottomLeft(materialFinder);
+    final Offset snackBarBottomRight = tester.getBottomRight(materialFinder);
+    expect(snackBarBottomLeft.dx, (800 - width) / 2); // Device width is 800.
+    expect(snackBarBottomRight.dx, (800 + width) / 2); // Device width is 800.
+  });
+
   testWidgets('Snackbar labels can be colored', (WidgetTester tester) async {
     await tester.pumpWidget(
       MaterialApp(
@@ -472,7 +593,7 @@ void main() {
     expect(actionTextBottomLeft.dx - textBottomRight.dx, 24.0);
     expect(snackBarBottomRight.dx - actionTextBottomRight.dx, 24.0 + 30.0); // margin + right padding
     expect(snackBarBottomRight.dy - actionTextBottomRight.dy, 17.0 + 40.0); // margin + bottom padding
-  }, skip: isBrowser);
+  });
 
   testWidgets(
     'Custom padding between SnackBar and its contents when set to SnackBarBehavior.fixed',
@@ -527,9 +648,7 @@ void main() {
       expect(actionTextBottomLeft.dx - textBottomRight.dx, 24.0);
       expect(snackBarBottomRight.dx - actionTextBottomRight.dx, 24.0 + 30.0); // margin + right padding
       expect(snackBarBottomRight.dy - actionTextBottomRight.dy, 17.0); // margin (with no bottom padding)
-    },
-    skip: isBrowser,
-  );
+    });
 
   testWidgets('SnackBar should push FloatingActionButton above', (WidgetTester tester) async {
     await tester.pumpWidget(MaterialApp(
@@ -634,7 +753,7 @@ void main() {
     expect(actionTextBottomLeft.dx - textBottomRight.dx, 16.0);
     expect(snackBarBottomRight.dx - actionTextBottomRight.dx, 31.0 + 30.0); // margin + right padding
     expect(snackBarBottomRight.dy - actionTextBottomRight.dy, 27.0); // margin (with no bottom padding)
-  }, skip: isBrowser);
+  });
 
   testWidgets(
     'Custom padding between SnackBar and its contents when set to SnackBarBehavior.floating',
@@ -692,9 +811,7 @@ void main() {
       expect(actionTextBottomLeft.dx - textBottomRight.dx, 16.0);
       expect(snackBarBottomRight.dx - actionTextBottomRight.dx, 31.0 + 30.0); // margin + right padding
       expect(snackBarBottomRight.dy - actionTextBottomRight.dy, 27.0); // margin (with no bottom padding)
-    },
-    skip: isBrowser,
-  );
+    });
 
   testWidgets('SnackBarClosedReason', (WidgetTester tester) async {
     final GlobalKey<ScaffoldState> scaffoldKey = GlobalKey<ScaffoldState>();
@@ -1075,10 +1192,6 @@ void main() {
         '$behavior should align SnackBar with the bottom of Scaffold '
         'when Scaffold has no other elements',
         (WidgetTester tester) async {
-          // TODO(shihaohong): Remove this flag once the migration to fix
-          // SnackBarBehavior.floating is complete.
-          Scaffold.shouldSnackBarIgnoreFABRect = true;
-
           await tester.pumpWidget(
             MaterialApp(
               home: Scaffold(
@@ -1101,9 +1214,6 @@ void main() {
           final Offset scaffoldBottomLeft = tester.getBottomLeft(find.byType(Scaffold));
 
           expect(snackBarBottomLeft, equals(scaffoldBottomLeft));
-          // TODO(shihaohong): Remove this flag once the migration to fix
-          // SnackBarBehavior.floating is complete.
-          Scaffold.shouldSnackBarIgnoreFABRect = false;
         },
       );
 
@@ -1111,9 +1221,6 @@ void main() {
         '$behavior should align SnackBar with the top of BottomNavigationBar '
         'when Scaffold has no FloatingActionButton',
         (WidgetTester tester) async {
-          // TODO(shihaohong): Remove this flag once the migration to fix
-          // SnackBarBehavior.floating is complete.
-          Scaffold.shouldSnackBarIgnoreFABRect = true;
           final UniqueKey boxKey = UniqueKey();
           await tester.pumpWidget(
             MaterialApp(
@@ -1138,9 +1245,6 @@ void main() {
           final Offset bottomNavigationBarTopLeft = tester.getTopLeft(find.byKey(boxKey));
 
           expect(snackBarBottomLeft, equals(bottomNavigationBarTopLeft));
-          // TODO(shihaohong): Remove this flag once the migration to fix
-          // SnackBarBehavior.floating is complete.
-          Scaffold.shouldSnackBarIgnoreFABRect = false;
         },
       );
 

@@ -4,6 +4,8 @@
 
 import 'dart:async';
 
+import 'package:convert/convert.dart';
+import 'package:crypto/crypto.dart';
 import 'package:meta/meta.dart';
 import 'package:pool/pool.dart';
 
@@ -14,11 +16,10 @@ import 'base/logger.dart';
 import 'build_info.dart';
 import 'build_system/build_system.dart';
 import 'build_system/depfile.dart';
-import 'build_system/targets/dart.dart';
+import 'build_system/targets/common.dart';
 import 'build_system/targets/icon_tree_shaker.dart';
 import 'cache.dart';
 import 'convert.dart';
-import 'dart/package_map.dart';
 import 'devfs.dart';
 import 'globals.dart' as globals;
 import 'project.dart';
@@ -31,6 +32,26 @@ String get defaultDepfilePath => globals.fs.path.join(getBuildDirectory(), 'snap
 String getDefaultApplicationKernelPath({ @required bool trackWidgetCreation }) {
   return getKernelPathForTransformerOptions(
     globals.fs.path.join(getBuildDirectory(), 'app.dill'),
+    trackWidgetCreation: trackWidgetCreation,
+  );
+}
+
+String getDefaultCachedKernelPath({
+  @required bool trackWidgetCreation,
+  @required List<String> dartDefines,
+  @required List<String> extraFrontEndOptions,
+}) {
+  final StringBuffer buffer = StringBuffer();
+  buffer.writeAll(dartDefines);
+  buffer.writeAll(extraFrontEndOptions ?? <String>[]);
+  String buildPrefix = '';
+  if (buffer.isNotEmpty) {
+    final String output = buffer.toString();
+    final Digest digest = md5.convert(utf8.encode(output));
+    buildPrefix = '${hex.encode(digest.bytes)}.';
+  }
+  return getKernelPathForTransformerOptions(
+    globals.fs.path.join(getBuildDirectory(), '${buildPrefix}cache.dill'),
     trackWidgetCreation: trackWidgetCreation,
   );
 }
@@ -75,7 +96,7 @@ class BundleBuilder {
     mainPath ??= defaultMainPath;
     depfilePath ??= defaultDepfilePath;
     assetDirPath ??= getAssetBuildDirectory();
-    packagesPath ??= globals.fs.path.absolute(PackageMap.globalPackagesPath);
+    packagesPath ??= globals.fs.path.absolute('.packages');
     final FlutterProject flutterProject = FlutterProject.current();
     await buildWithAssemble(
       buildMode: buildInfo.mode,
@@ -123,6 +144,9 @@ Future<void> buildWithAssemble({
     buildDir: flutterProject.dartTool.childDirectory('flutter_build'),
     cacheDir: globals.cache.getRoot(),
     flutterRootDir: globals.fs.directory(Cache.flutterRoot),
+    engineVersion: globals.artifacts.isLocalEngine
+      ? null
+      : globals.flutterVersion.engineRevision,
     defines: <String, String>{
       kTargetFile: mainPath,
       kBuildMode: getNameForBuildMode(buildMode),
@@ -130,8 +154,12 @@ Future<void> buildWithAssemble({
       kTrackWidgetCreation: trackWidgetCreation?.toString(),
       kIconTreeShakerFlag: treeShakeIcons ? 'true' : null,
       if (dartDefines != null && dartDefines.isNotEmpty)
-        kDartDefines: jsonEncode(dartDefines),
+        kDartDefines: encodeDartDefines(dartDefines),
     },
+    artifacts: globals.artifacts,
+    fileSystem: globals.fs,
+    logger: globals.logger,
+    processManager: globals.processManager,
   );
   final Target target = buildMode == BuildMode.debug
     ? const CopyFlutterBundle()
@@ -157,7 +185,6 @@ Future<void> buildWithAssemble({
     final DepfileService depfileService = DepfileService(
       fileSystem: globals.fs,
       logger: globals.logger,
-      platform: globals.platform,
     );
     depfileService.writeToFile(depfile, outputDepfile);
   }
@@ -166,12 +193,12 @@ Future<void> buildWithAssemble({
 Future<AssetBundle> buildAssets({
   String manifestPath,
   String assetDirPath,
-  String packagesPath,
+  @required String packagesPath,
   bool includeDefaultFonts = true,
   bool reportLicensedPackages = false,
 }) async {
   assetDirPath ??= getAssetBuildDirectory();
-  packagesPath ??= globals.fs.path.absolute(PackageMap.globalPackagesPath);
+  packagesPath ??= globals.fs.path.absolute(packagesPath);
 
   // Build the asset bundle.
   final AssetBundle assetBundle = AssetBundleFactory.instance.createBundle();

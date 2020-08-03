@@ -9,19 +9,18 @@ import 'package:args/command_runner.dart';
 import 'package:completion/completion.dart';
 import 'package:file/file.dart';
 import 'package:meta/meta.dart';
+import 'package:package_config/package_config.dart';
 
 import '../artifacts.dart';
 import '../base/common.dart';
 import '../base/context.dart';
 import '../base/file_system.dart';
-import '../base/logger.dart';
 import '../base/terminal.dart';
 import '../base/user_messages.dart';
 import '../base/utils.dart';
 import '../cache.dart';
 import '../convert.dart';
 import '../dart/package_map.dart';
-import '../device.dart';
 import '../globals.dart' as globals;
 import '../tester/flutter_tester.dart';
 
@@ -235,12 +234,6 @@ class FlutterCommandRunner extends CommandRunner<void> {
   Future<void> runCommand(ArgResults topLevelResults) async {
     final Map<Type, dynamic> contextOverrides = <Type, dynamic>{};
 
-    // Check for verbose.
-    if (topLevelResults['verbose'] as bool) {
-      // Override the logger.
-      contextOverrides[Logger] = VerboseLogger(globals.logger);
-    }
-
     // Don't set wrapColumns unless the user said to: if it's set, then all
     // wrapping will occur at this width explicitly, and won't adapt if the
     // terminal size changes during a run.
@@ -278,7 +271,7 @@ class FlutterCommandRunner extends CommandRunner<void> {
     Cache.flutterRoot = globals.fs.path.normalize(globals.fs.path.absolute(flutterRoot));
 
     // Set up the tooling configuration.
-    final String enginePath = _findEnginePath(topLevelResults);
+    final String enginePath = await _findEnginePath(topLevelResults);
     if (enginePath != null) {
       contextOverrides.addAll(<Type, dynamic>{
         Artifacts: Artifacts.getLocalEngine(_findEngineBuildPath(topLevelResults, enginePath)),
@@ -300,7 +293,6 @@ class FlutterCommandRunner extends CommandRunner<void> {
           globals.flutterUsage.suppressAnalytics = true;
         }
 
-        _checkFlutterCopy();
         try {
           await globals.flutterVersion.ensureVersionFile();
         } on FileSystemException catch (e) {
@@ -314,18 +306,22 @@ class FlutterCommandRunner extends CommandRunner<void> {
         }
 
         if (topLevelResults.wasParsed('packages')) {
-          PackageMap.globalPackagesPath = globals.fs.path.normalize(globals.fs.path.absolute(topLevelResults['packages'] as String));
+          globalPackagesPath = globals.fs.path.normalize(globals.fs.path.absolute(topLevelResults['packages'] as String));
         }
 
         // See if the user specified a specific device.
-        deviceManager.specifiedDeviceId = topLevelResults['device-id'] as String;
+        globals.deviceManager.specifiedDeviceId = topLevelResults['device-id'] as String;
 
         if (topLevelResults['version'] as bool) {
           globals.flutterUsage.sendCommand('version');
           globals.flutterVersion.fetchTagsAndUpdate();
           String status;
           if (machineFlag) {
-            status = const JsonEncoder.withIndent('  ').convert(globals.flutterVersion.toJson());
+            final Map<String, Object> jsonOut = globals.flutterVersion.toJson();
+            if (jsonOut != null) {
+              jsonOut['flutterRoot'] = Cache.flutterRoot;
+            }
+            status = const JsonEncoder.withIndent('  ').convert(jsonOut);
           } else {
             status = globals.flutterVersion.toString();
           }
@@ -348,13 +344,18 @@ class FlutterCommandRunner extends CommandRunner<void> {
     return null;
   }
 
-  String _findEnginePath(ArgResults globalResults) {
+  Future<String> _findEnginePath(ArgResults globalResults) async {
     String engineSourcePath = globalResults['local-engine-src-path'] as String
       ?? globals.platform.environment[kFlutterEngineEnvironmentVariableName];
 
     if (engineSourcePath == null && globalResults['local-engine'] != null) {
       try {
-        Uri engineUri = PackageMap(PackageMap.globalPackagesPath, fileSystem: globals.fs).map[kFlutterEnginePackageName];
+        final PackageConfig packageConfig = await loadPackageConfigWithLogging(
+          globals.fs.file(globalPackagesPath),
+          logger: globals.logger,
+          throwOnError: false,
+        );
+        Uri engineUri = packageConfig[kFlutterEnginePackageName]?.packageUriRoot;
         // Skip if sky_engine is the self-contained one.
         if (engineUri != null && globals.fs.identicalSync(globals.fs.path.join(Cache.flutterRoot, 'bin', 'cache', 'pkg', kFlutterEnginePackageName, 'lib'), engineUri.path)) {
           engineUri = null;
@@ -466,68 +467,4 @@ class FlutterCommandRunner extends CommandRunner<void> {
 
     return projectPaths;
   }
-
-  void _checkFlutterCopy() {
-    // If the current directory is contained by a flutter repo, check that it's
-    // the same flutter that is currently running.
-    String directory = globals.fs.path.normalize(globals.fs.path.absolute(globals.fs.currentDirectory.path));
-
-    // Check if the cwd is a flutter dir.
-    while (directory.isNotEmpty) {
-      if (_isDirectoryFlutterRepo(directory)) {
-        if (!_compareResolvedPaths(directory, Cache.flutterRoot)) {
-          globals.printError(userMessages.runnerWrongFlutterInstance(Cache.flutterRoot, directory));
-        }
-
-        break;
-      }
-
-      final String parent = globals.fs.path.dirname(directory);
-      if (parent == directory) {
-        break;
-      }
-      directory = parent;
-    }
-
-    // Check that the flutter running is that same as the one referenced in the pubspec.
-    if (globals.fs.isFileSync(kPackagesFileName)) {
-      final PackageMap packageMap = PackageMap(kPackagesFileName, fileSystem: globals.fs);
-      Uri flutterUri;
-      try {
-        flutterUri = packageMap.map['flutter'];
-      } on FormatException {
-        // We're not quite sure why this can happen, perhaps the user
-        // accidentally edited the .packages file. Re-running pub should
-        // fix the issue, and we definitely shouldn't crash here.
-        globals.printTrace('Failed to parse .packages file to check flutter dependency.');
-        return;
-      }
-
-      if (flutterUri != null && (flutterUri.scheme == 'file' || flutterUri.scheme == '')) {
-        // .../flutter/packages/flutter/lib
-        final Uri rootUri = flutterUri.resolve('../../..');
-        final String flutterPath = globals.fs.path.normalize(globals.fs.file(rootUri).absolute.path);
-
-        if (!globals.fs.isDirectorySync(flutterPath)) {
-          globals.printError(userMessages.runnerRemovedFlutterRepo(Cache.flutterRoot, flutterPath));
-        } else if (!_compareResolvedPaths(flutterPath, Cache.flutterRoot)) {
-          globals.printError(userMessages.runnerChangedFlutterRepo(Cache.flutterRoot, flutterPath));
-        }
-      }
-    }
-  }
-
-  // Check if `bin/flutter` and `bin/cache/engine.stamp` exist.
-  bool _isDirectoryFlutterRepo(String directory) {
-    return
-      globals.fs.isFileSync(globals.fs.path.join(directory, 'bin/flutter')) &&
-      globals.fs.isFileSync(globals.fs.path.join(directory, 'bin/cache/engine.stamp'));
-  }
-}
-
-bool _compareResolvedPaths(String path1, String path2) {
-  path1 = globals.fs.directory(globals.fs.path.absolute(path1)).resolveSymbolicLinksSync();
-  path2 = globals.fs.directory(globals.fs.path.absolute(path2)).resolveSymbolicLinksSync();
-
-  return path1 == path2;
 }

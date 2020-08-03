@@ -5,13 +5,13 @@
 import 'package:archive/archive.dart';
 import 'package:file/file.dart';
 import 'package:meta/meta.dart';
-import 'package:platform/platform.dart';
 import 'package:process/process.dart';
 
 import '../globals.dart' as globals;
 import 'file_system.dart';
 import 'io.dart';
 import 'logger.dart';
+import 'platform.dart';
 import 'process.dart';
 
 abstract class OperatingSystemUtils {
@@ -51,6 +51,9 @@ abstract class OperatingSystemUtils {
         logger: logger,
         processManager: processManager,
       );
+
+  @visibleForTesting
+  static final GZipCodec gzipLevel1 = GZipCodec(level: 1);
 
   final FileSystem _fileSystem;
   final Logger _logger;
@@ -97,6 +100,11 @@ abstract class OperatingSystemUtils {
 
   /// Returns true if the gzip is not corrupt (does not check tar).
   bool verifyGzip(File gzippedFile);
+
+  /// Compresses a stream using gzip level 1 (faster but larger).
+  Stream<List<int>> gzipLevel1Stream(Stream<List<int>> stream) {
+    return stream.cast<List<int>>().transform<List<int>>(gzipLevel1.encoder);
+  }
 
   /// Returns a pretty name string for the current operating system.
   ///
@@ -218,6 +226,7 @@ class _PosixUtils extends OperatingSystemUtils {
     _processUtils.runSync(
       <String>['unzip', '-o', '-q', file.path, '-d', targetDirectory.path],
       throwOnError: true,
+      verboseExceptions: true,
     );
   }
 
@@ -353,6 +362,8 @@ class _WindowsUtils extends OperatingSystemUtils {
     } on FileSystemException catch (_) {
       return false;
     } on ArchiveException catch (_) {
+      return false;
+    } on RangeError catch (_) {
       return false;
     }
     return true;

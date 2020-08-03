@@ -189,11 +189,18 @@ void mkdirs(Directory directory) {
 bool exists(FileSystemEntity entity) => entity.existsSync();
 
 void section(String title) {
-  title = '╡ ••• $title ••• ╞';
-  final String line = '═' * math.max((80 - title.length) ~/ 2, 2);
-  String output = '$line$title$line';
-  if (output.length == 79)
-    output += '═';
+  String output;
+  if (Platform.isWindows) {
+    // Windows doesn't cope well with characters produced for *nix systems, so
+    // just output the title with no decoration.
+    output = title;
+  } else {
+    title = '╡ ••• $title ••• ╞';
+    final String line = '═' * math.max((80 - title.length) ~/ 2, 2);
+    output = '$line$title$line';
+    if (output.length == 79)
+      output += '═';
+  }
   print('\n\n$output\n');
 }
 
@@ -317,8 +324,39 @@ Future<int> exec(
   bool canFail = false, // as in, whether failures are ok. False means that they are fatal.
   String workingDirectory,
 }) async {
-  final Process process = await startProcess(executable, arguments, environment: environment, workingDirectory: workingDirectory);
-  await forwardStandardStreams(process);
+  return _execute(
+    executable,
+    arguments,
+    environment: environment,
+    canFail : canFail,
+    workingDirectory: workingDirectory,
+  );
+}
+
+Future<int> _execute(
+  String executable,
+  List<String> arguments, {
+  Map<String, String> environment,
+  bool canFail = false, // as in, whether failures are ok. False means that they are fatal.
+  String workingDirectory,
+  StringBuffer output, // if not null, the stdout will be written here
+  StringBuffer stderr, // if not null, the stderr will be written here
+  bool printStdout = true,
+  bool printStderr = true,
+}) async {
+  final Process process = await startProcess(
+    executable,
+    arguments,
+    environment: environment,
+    workingDirectory: workingDirectory,
+  );
+  await forwardStandardStreams(
+    process,
+    output: output,
+    stderr: stderr,
+    printStdout: printStdout,
+    printStderr: printStderr,
+    );
   final int exitCode = await process.exitCode;
 
   if (exitCode != 0 && !canFail)
@@ -328,26 +366,42 @@ Future<int> exec(
 }
 
 /// Forwards standard out and standard error from [process] to this process'
-/// respective outputs.
+/// respective outputs. Also writes stdout to [output] and stderr to [stderr]
+/// if they are not null.
 ///
 /// Returns a future that completes when both out and error streams a closed.
-Future<void> forwardStandardStreams(Process process) {
+Future<void> forwardStandardStreams(
+  Process process, {
+  StringBuffer output,
+  StringBuffer stderr,
+  bool printStdout = true,
+  bool printStderr = true,
+  }) {
   final Completer<void> stdoutDone = Completer<void>();
   final Completer<void> stderrDone = Completer<void>();
   process.stdout
       .transform<String>(utf8.decoder)
       .transform<String>(const LineSplitter())
       .listen((String line) {
-        print('stdout: $line');
+        if (printStdout) {
+          print('stdout: $line');
+        }
+        output?.writeln(line);
       }, onDone: () { stdoutDone.complete(); });
   process.stderr
       .transform<String>(utf8.decoder)
       .transform<String>(const LineSplitter())
       .listen((String line) {
-        print('stderr: $line');
+        if (printStderr) {
+          print('stderr: $line');
+        }
+        stderr?.writeln(line);
       }, onDone: () { stderrDone.complete(); });
 
-  return Future.wait<void>(<Future<void>>[stdoutDone.future, stderrDone.future]);
+  return Future.wait<void>(<Future<void>>[
+    stdoutDone.future,
+    stderrDone.future,
+  ]);
 }
 
 /// Executes a command and returns its standard output as a String.
@@ -363,36 +417,18 @@ Future<String> eval(
   bool printStdout = true,
   bool printStderr = true,
 }) async {
-  final Process process = await startProcess(executable, arguments, environment: environment, workingDirectory: workingDirectory);
-
   final StringBuffer output = StringBuffer();
-  final Completer<void> stdoutDone = Completer<void>();
-  final Completer<void> stderrDone = Completer<void>();
-  process.stdout
-      .transform<String>(utf8.decoder)
-      .transform<String>(const LineSplitter())
-      .listen((String line) {
-        if (printStdout) {
-          print('stdout: $line');
-        }
-        output.writeln(line);
-      }, onDone: () { stdoutDone.complete(); });
-  process.stderr
-      .transform<String>(utf8.decoder)
-      .transform<String>(const LineSplitter())
-      .listen((String line) {
-        if (printStderr) {
-          print('stderr: $line');
-        }
-        stderr?.writeln(line);
-      }, onDone: () { stderrDone.complete(); });
-
-  await Future.wait<void>(<Future<void>>[stdoutDone.future, stderrDone.future]);
-  final int exitCode = await process.exitCode;
-
-  if (exitCode != 0 && !canFail)
-    fail('Executable "$executable" failed with exit code $exitCode.');
-
+  await _execute(
+    executable,
+    arguments,
+    environment: environment,
+    canFail: canFail,
+    workingDirectory: workingDirectory,
+    output: output,
+    stderr: stderr,
+    printStdout: printStdout,
+    printStderr: printStderr,
+  );
   return output.toString().trimRight();
 }
 
@@ -430,7 +466,10 @@ Future<String> evalFlutter(String command, {
 String get dartBin =>
     path.join(flutterDirectory.path, 'bin', 'cache', 'dart-sdk', 'bin', 'dart');
 
-Future<int> dart(List<String> args) => exec(dartBin, args);
+String get pubBin =>
+    path.join(flutterDirectory.path, 'bin', 'cache', 'dart-sdk', 'bin', 'pub');
+
+Future<int> dart(List<String> args) => exec(dartBin, <String>['--disable-dart-dev', ...args]);
 
 /// Returns a future that completes with a path suitable for JAVA_HOME
 /// or with null, if Java cannot be found.
@@ -465,11 +504,11 @@ void cd(dynamic directory) {
     cwd = directory.path;
     d = directory;
   } else {
-    throw 'Unsupported type ${directory.runtimeType} of $directory';
+    throw FileSystemException('Unsupported directory type ${directory.runtimeType}', directory.toString());
   }
 
   if (!d.existsSync())
-    throw 'Cannot cd into directory that does not exist: $directory';
+    throw FileSystemException('Cannot cd into directory that does not exist', d.toString());
 }
 
 Directory get flutterDirectory => Directory.current.parent.parent;
@@ -494,28 +533,20 @@ String jsonEncode(dynamic data) {
   return const JsonEncoder.withIndent('  ').convert(data) + '\n';
 }
 
-Future<void> getFlutter(String revision) async {
-  section('Get Flutter!');
+Future<void> getNewGallery(String revision, Directory galleryDir) async {
+  section('Get New Flutter Gallery!');
 
-  if (exists(flutterDirectory)) {
-    flutterDirectory.deleteSync(recursive: true);
+  if (exists(galleryDir)) {
+    galleryDir.deleteSync(recursive: true);
   }
 
-  await inDirectory<void>(flutterDirectory.parent, () async {
-    await exec('git', <String>['clone', 'https://github.com/flutter/flutter.git']);
+  await inDirectory<void>(galleryDir.parent, () async {
+    await exec('git', <String>['clone', 'https://github.com/flutter/gallery.git']);
   });
 
-  await inDirectory<void>(flutterDirectory, () async {
+  await inDirectory<void>(galleryDir, () async {
     await exec('git', <String>['checkout', revision]);
   });
-
-  await flutter('config', options: <String>['--no-analytics']);
-
-  section('flutter doctor');
-  await flutter('doctor');
-
-  section('flutter update-packages');
-  await flutter('update-packages');
 }
 
 void checkNotNull(Object o1,
@@ -662,6 +693,13 @@ void checkDirectoryExists(String directory) {
   }
 }
 
+/// Checks that the directory does not exist, otherwise throws a [FileSystemException].
+void checkDirectoryNotExists(String directory) {
+  if (exists(Directory(directory))) {
+    throw FileSystemException('Expected directory to not exist.', directory);
+  }
+}
+
 /// Check that `collection` contains all entries in `values`.
 void checkCollectionContains<T>(Iterable<T> values, Iterable<T> collection) {
   for (final T value in values) {
@@ -692,4 +730,19 @@ void checkFileContains(List<Pattern> patterns, String filePath) {
       );
     }
   }
+}
+
+/// Clones a git repository.
+///
+/// Removes the directory [path], then clones the git repository
+/// specified by [repo] to the directory [path].
+Future<int> gitClone({String path, String repo}) async {
+  rmTree(Directory(path));
+
+  await Directory(path).create(recursive: true);
+
+  return await inDirectory<int>(
+    path,
+        () => exec('git', <String>['clone', repo]),
+  );
 }

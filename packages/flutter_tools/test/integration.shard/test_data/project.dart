@@ -26,6 +26,8 @@ abstract class Project {
 
   String get pubspec;
   String get main;
+  String get test => null;
+  String get generatedFile => null;
 
   Uri get mainDart => Uri.parse('package:test/main.dart');
 
@@ -35,7 +37,14 @@ abstract class Project {
     if (main != null) {
       writeFile(globals.fs.path.join(dir.path, 'lib', 'main.dart'), main);
     }
+    if (test != null) {
+      writeFile(globals.fs.path.join(dir.path, 'test', 'test.dart'), test);
+    }
+    if (generatedFile != null) {
+      writeFile(globals.fs.path.join(dir.path, '.dart_tool', 'flutter_gen', 'flutter_gen.dart'), generatedFile);
+    }
     writeFile(globals.fs.path.join(dir.path, 'web', 'index.html'), _kDefaultHtml);
+    writePackages(dir.path);
     await getPackages(dir.path);
   }
 

@@ -2,6 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+// @dart = 2.8
+
 import 'dart:ui' show Brightness;
 import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -69,7 +71,6 @@ void main() {
     expect(data.boldText, false);
     expect(data.highContrast, false);
     expect(data.platformBrightness, Brightness.light);
-    expect(data.physicalDepth, equals(WidgetsBinding.instance.window.physicalDepth));
   });
 
   testWidgets('MediaQueryData.copyWith defaults to source', (WidgetTester tester) async {
@@ -82,7 +83,6 @@ void main() {
     expect(copied.viewPadding, data.viewPadding);
     expect(copied.viewInsets, data.viewInsets);
     expect(copied.systemGestureInsets, data.systemGestureInsets);
-    expect(copied.physicalDepth, data.physicalDepth);
     expect(copied.alwaysUse24HourFormat, data.alwaysUse24HourFormat);
     expect(copied.accessibleNavigation, data.accessibleNavigation);
     expect(copied.invertColors, data.invertColors);
@@ -102,7 +102,6 @@ void main() {
     const EdgeInsets customViewPadding = EdgeInsets.all(11.24031);
     const EdgeInsets customViewInsets = EdgeInsets.all(1.67262);
     const EdgeInsets customSystemGestureInsets = EdgeInsets.all(1.5556);
-    const double customPhysicalDepth = 120.0;
 
     final MediaQueryData data = MediaQueryData.fromWindow(WidgetsBinding.instance.window);
     final MediaQueryData copied = data.copyWith(
@@ -113,7 +112,6 @@ void main() {
       viewPadding: customViewPadding,
       viewInsets: customViewInsets,
       systemGestureInsets: customSystemGestureInsets,
-      physicalDepth: customPhysicalDepth,
       alwaysUse24HourFormat: true,
       accessibleNavigation: true,
       invertColors: true,
@@ -129,7 +127,6 @@ void main() {
     expect(copied.viewPadding, customViewPadding);
     expect(copied.viewInsets, customViewInsets);
     expect(copied.systemGestureInsets, customSystemGestureInsets);
-    expect(copied.physicalDepth, customPhysicalDepth);
     expect(copied.alwaysUse24HourFormat, true);
     expect(copied.accessibleNavigation, true);
     expect(copied.invertColors, true);
@@ -538,6 +535,33 @@ void main() {
     expect(insideBrightness, Brightness.dark);
   });
 
+  testWidgets('MediaQuery.highContrastOf', (WidgetTester tester) async {
+    bool outsideHighContrast;
+    bool insideHighContrast;
+
+    await tester.pumpWidget(
+      Builder(
+        builder: (BuildContext context) {
+          outsideHighContrast = MediaQuery.highContrastOf(context);
+          return MediaQuery(
+            data: const MediaQueryData(
+              highContrast: true,
+            ),
+            child: Builder(
+              builder: (BuildContext context) {
+                insideHighContrast = MediaQuery.highContrastOf(context);
+                return Container();
+              },
+            ),
+          );
+        },
+      ),
+    );
+
+    expect(outsideHighContrast, false);
+    expect(insideHighContrast, true);
+  });
+
   testWidgets('MediaQuery.boldTextOverride', (WidgetTester tester) async {
     bool outsideBoldTextOverride;
     bool insideBoldTextOverride;
@@ -564,4 +588,159 @@ void main() {
     expect(outsideBoldTextOverride, false);
     expect(insideBoldTextOverride, true);
   });
+
+  test('size parameter in MediaQueryData cannot be null', () {
+    try {
+      MediaQueryData(size: null);
+    } on AssertionError catch (error) {
+      expect(error.toString(), contains('size != null'));
+      expect(error.toString(), contains('is not true'));
+      return;
+    }
+    fail('The assert was never called when it should have been');
+  });
+
+  test('devicePixelRatio parameter in MediaQueryData cannot be null', () {
+    try {
+      MediaQueryData(devicePixelRatio: null);
+    } on AssertionError catch (error) {
+      expect(error.toString(), contains('devicePixelRatio != null'));
+      expect(error.toString(), contains('is not true'));
+      return;
+    }
+    fail('The assert was never called when it should have been');
+  });
+
+  test('textScaleFactor parameter in MediaQueryData cannot be null', () {
+    try {
+      MediaQueryData(textScaleFactor: null);
+    } on AssertionError catch (error) {
+      expect(error.toString(), contains('textScaleFactor != null'));
+      expect(error.toString(), contains('is not true'));
+      return;
+    }
+    fail('The assert was never called when it should have been');
+  });
+
+  test('platformBrightness parameter in MediaQueryData cannot be null', () {
+    try {
+      MediaQueryData(platformBrightness: null);
+    } on AssertionError catch (error) {
+      expect(error.toString(), contains('platformBrightness != null'));
+      expect(error.toString(), contains('is not true'));
+      return;
+    }
+    fail('The assert was never called when it should have been');
+  });
+
+  test('padding parameter in MediaQueryData cannot be null', () {
+    try {
+      MediaQueryData(padding: null);
+    } on AssertionError catch (error) {
+      expect(error.toString(), contains('padding != null'));
+      expect(error.toString(), contains('is not true'));
+      return;
+    }
+    fail('The assert was never called when it should have been');
+  });
+
+  test('viewInsets parameter in MediaQueryData cannot be null', () {
+    try {
+      MediaQueryData(viewInsets: null);
+    } on AssertionError catch (error) {
+      expect(error.toString(), contains('viewInsets != null'));
+      expect(error.toString(), contains('is not true'));
+      return;
+    }
+    fail('The assert was never called when it should have been');
+  });
+
+  test('systemGestureInsets parameter in MediaQueryData cannot be null', () {
+    try {
+      MediaQueryData(systemGestureInsets: null);
+    } on AssertionError catch (error) {
+      expect(error.toString(), contains('systemGestureInsets != null'));
+      expect(error.toString(), contains('is not true'));
+      return;
+    }
+    fail('The assert was never called when it should have been');
+  });
+
+  test('viewPadding parameter in MediaQueryData cannot be null', () {
+    try {
+      MediaQueryData(viewPadding: null);
+    } on AssertionError catch (error) {
+      expect(error.toString(), contains('viewPadding != null'));
+      expect(error.toString(), contains('is not true'));
+      return;
+    }
+    fail('The assert was never called when it should have been');
+  });
+
+  test('alwaysUse24HourFormat parameter in MediaQueryData cannot be null', () {
+    try {
+      MediaQueryData(alwaysUse24HourFormat: null);
+    } on AssertionError catch (error) {
+      expect(error.toString(), contains('alwaysUse24HourFormat != null'));
+      expect(error.toString(), contains('is not true'));
+      return;
+    }
+    fail('The assert was never called when it should have been');
+  });
+
+  test('accessibleNavigation parameter in MediaQueryData cannot be null', () {
+    try {
+      MediaQueryData(accessibleNavigation: null);
+    } on AssertionError catch (error) {
+      expect(error.toString(), contains('accessibleNavigation != null'));
+      expect(error.toString(), contains('is not true'));
+      return;
+    }
+    fail('The assert was never called when it should have been');
+  });
+
+  test('invertColors parameter in MediaQueryData cannot be null', () {
+    try {
+      MediaQueryData(invertColors: null);
+    } on AssertionError catch (error) {
+      expect(error.toString(), contains('invertColors != null'));
+      expect(error.toString(), contains('is not true'));
+      return;
+    }
+    fail('The assert was never called when it should have been');
+  });
+
+  test('highContrast parameter in MediaQueryData cannot be null', () {
+    try {
+      MediaQueryData(highContrast: null);
+    } on AssertionError catch (error) {
+      expect(error.toString(), contains('highContrast != null'));
+      expect(error.toString(), contains('is not true'));
+      return;
+    }
+    fail('The assert was never called when it should have been');
+  });
+
+  test('disableAnimations parameter in MediaQueryData cannot be null', () {
+    try {
+      MediaQueryData(disableAnimations: null);
+    } on AssertionError catch (error) {
+      expect(error.toString(), contains('disableAnimations != null'));
+      expect(error.toString(), contains('is not true'));
+      return;
+    }
+    fail('The assert was never called when it should have been');
+  });
+
+  test('boldText parameter in MediaQueryData cannot be null', () {
+    try {
+      MediaQueryData(boldText: null);
+    } on AssertionError catch (error) {
+      expect(error.toString(), contains('boldText != null'));
+      expect(error.toString(), contains('is not true'));
+      return;
+    }
+    fail('The assert was never called when it should have been');
+  });
+
 }

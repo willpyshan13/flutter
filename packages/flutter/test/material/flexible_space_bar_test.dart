@@ -2,6 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+// @dart = 2.8
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -216,7 +218,7 @@ void main() {
     await tester.pumpWidget(buildFrame(TargetPlatform.macOS, false));
     expect(getTitleBottomLeft(), const Offset(72.0, 16.0));
 
-  }, skip: isBrowser);
+  });
 
   testWidgets('FlexibleSpaceBar test titlePadding override', (WidgetTester tester) async {
     Widget buildFrame(TargetPlatform platform, bool centerTitle) {
@@ -284,7 +286,7 @@ void main() {
 
     await tester.pumpWidget(buildFrame(TargetPlatform.linux, true));
     expect(getTitleBottomLeft(), const Offset(390.0, 0.0));
-  }, skip: isBrowser);
+  });
 }
 
 class TestDelegate extends SliverPersistentHeaderDelegate {

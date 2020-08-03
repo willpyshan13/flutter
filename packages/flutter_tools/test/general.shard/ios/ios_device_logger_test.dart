@@ -2,13 +2,17 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+import 'dart:async';
+
 import 'package:flutter_tools/src/artifacts.dart';
 import 'package:flutter_tools/src/base/logger.dart';
 import 'package:flutter_tools/src/build_info.dart';
+import 'package:flutter_tools/src/convert.dart';
 import 'package:flutter_tools/src/device.dart';
 import 'package:flutter_tools/src/ios/devices.dart';
 import 'package:flutter_tools/src/ios/mac.dart';
 import 'package:mockito/mockito.dart';
+import 'package:vm_service/vm_service.dart';
 
 import '../../src/common.dart';
 import '../../src/context.dart';
@@ -137,6 +141,56 @@ Runner(libsystem_asl.dylib)[297] <Notice>: libMobileGestalt
       '  with a non-Flutter log message following it.',
     ]);
   });
+
+  testWithoutContext('IOSDeviceLogReader can listen to VM Service logs', () async {
+    final MockVmService vmService = MockVmService();
+    final DeviceLogReader logReader = IOSDeviceLogReader.test(
+      useSyslog: false,
+      iMobileDevice: IMobileDevice(
+        artifacts: artifacts,
+        processManager: processManager,
+        cache: fakeCache,
+        logger: logger,
+      ),
+    );
+    final StreamController<Event> stdoutController = StreamController<Event>();
+    final StreamController<Event> stderController = StreamController<Event>();
+    final Completer<Success> stdoutCompleter = Completer<Success>();
+    final Completer<Success> stderrCompleter = Completer<Success>();
+    when(vmService.streamListen('Stdout')).thenAnswer((Invocation invocation) {
+      return stdoutCompleter.future;
+    });
+    when(vmService.streamListen('Stderr')).thenAnswer((Invocation invocation) {
+      return stderrCompleter.future;
+    });
+    when(vmService.onStdoutEvent).thenAnswer((Invocation invocation) {
+      return stdoutController.stream;
+    });
+    when(vmService.onStderrEvent).thenAnswer((Invocation invocation) {
+      return stderController.stream;
+    });
+    logReader.connectedVMService = vmService;
+
+    stdoutCompleter.complete(Success());
+    stderrCompleter.complete(Success());
+    stdoutController.add(Event(
+      kind: 'Stdout',
+      timestamp: 0,
+      bytes: base64.encode(utf8.encode('  This is a message ')),
+    ));
+    stderController.add(Event(
+      kind: 'Stderr',
+      timestamp: 0,
+      bytes: base64.encode(utf8.encode('  And this is an error ')),
+    ));
+
+    // Wait for stream listeners to fire.
+    await expectLater(logReader.logLines, emitsInAnyOrder(<Matcher>[
+      equals('  This is a message '),
+      equals('  And this is an error '),
+    ]));
+  });
 }
 
 class MockArtifacts extends Mock implements Artifacts {}
+class MockVmService extends Mock implements VmService {}

@@ -2,6 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+// @dart = 2.8
+
 import 'package:flutter/foundation.dart';
 import '../flutter_test_alternative.dart';
 
@@ -14,7 +16,7 @@ void main() {
     });
     expect(log[0], contains('Example label'));
     expect(log[1], contains('debugPrintStack'));
-  }, skip: isBrowser);
+  });
 
   test('debugPrintStack', () {
     final List<String> log = captureOutput(() {
@@ -39,7 +41,7 @@ void main() {
 
     expect(joined, contains('captureOutput'));
     expect(joined, contains('\nExample information\n'));
-  }, skip: isBrowser);
+  });
 
   test('FlutterErrorDetails.toString', () {
     expect(

@@ -2,6 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+// @dart = 2.8
+
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
@@ -186,7 +188,7 @@ void main() {
       ),
     );
     expect(tester.getSize(find.text('Z')), equals(const Size(16.0, 16.0)));
-  }, skip: isBrowser);
+  });
 
   testWidgets('CircleAvatar respects minRadius', (WidgetTester tester) async {
     final Color backgroundColor = Colors.blue.shade900;

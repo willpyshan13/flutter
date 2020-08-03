@@ -2,6 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+// @dart = 2.8
+
 import 'dart:ui' show lerpDouble;
 
 import 'package:flutter/foundation.dart';
@@ -27,6 +29,7 @@ import 'theme.dart';
 ///  * [Dialog], a material dialog that can be customized using this [DialogTheme].
 ///  * [ThemeData], which describes the overall theme information for the
 ///    application.
+@immutable
 class DialogTheme with Diagnosticable {
   /// Creates a dialog theme that can be used for [ThemeData.dialogTheme].
   const DialogTheme({
@@ -53,12 +56,12 @@ class DialogTheme with Diagnosticable {
 
   /// Used to configure the [DefaultTextStyle] for the [AlertDialog.title] widget.
   ///
-  /// If null, defaults to [ThemeData.textTheme.headline6].
+  /// If null, defaults to [TextTheme.headline6] of [ThemeData.textTheme].
   final TextStyle titleTextStyle;
 
   /// Used to configure the [DefaultTextStyle] for the [AlertDialog.content] widget.
   ///
-  /// If null, defaults to [ThemeData.textTheme.subtitle1].
+  /// If null, defaults to [TextTheme.subtitle1] of [ThemeData.textTheme].
   final TextStyle contentTextStyle;
 
   /// Creates a copy of this object but with the given fields replaced with the

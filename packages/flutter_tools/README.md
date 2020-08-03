@@ -24,7 +24,7 @@ To run Flutter Tools from source, in this directory run:
 ```shell
 $ ../../bin/cache/dart-sdk/bin/dart bin/flutter_tools.dart
 ```
-followed by command line arguments, as usual.
+followed by command-line arguments, as usual.
 
 
 ### Running the analyzer
@@ -51,8 +51,8 @@ file called `file_test.dart` in the subdirectory that matches the behavior of
 the test.
 
 We measure [test coverage](https://codecov.io/gh/flutter/flutter) post-submit.
-A change that deletes code might decrease test coverage, however most changes
-that add new code should aim to increase coverage. In particular the coverage
+A change that deletes code might decrease test coverage, however, most changes
+that add new code should aim to increase coverage. In particular, the coverage
 of the diff should be close to the average coverage, and should ideally be
 better.
 
@@ -75,14 +75,6 @@ To run the tests in a specific file, run:
 ```shell
 $ ../../bin/cache/dart-sdk/bin/pub run test test/general.shard/utils_test.dart
 ```
-
-When running all of the tests, it is a bit faster to use `build_runner`. First,
-set `FLUTTER_ROOT` to the root of your Flutter checkout. Then, in this directory
-run:
-```shell
-$ ../../bin/cache/dart-sdk/bin/pub run build_runner test
-```
-This is what we do in the continuous integration bots.
 
 ### Forcing snapshot regeneration
 

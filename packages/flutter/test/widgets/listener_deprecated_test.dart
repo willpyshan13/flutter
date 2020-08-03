@@ -2,6 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+// @dart = 2.8
+
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -10,10 +12,6 @@ import 'package:flutter/gestures.dart';
 
 // The tests in this file are moved from listener_test.dart, which tests several
 // deprecated APIs. The file should be removed once these parameters are.
-
-// ignore_for_file: deprecated_member_use_from_same_package
-// We have to ignore the lint rule here because we need to use the deprecated
-// callbacks in order to test them.
 
 class HoverClient extends StatefulWidget {
   const HoverClient({Key key, this.onHover, this.child}) : super(key: key);
@@ -122,7 +120,7 @@ void main() {
       await tester.pumpWidget(
         Center(
           child: Listener(
-            child: Container(
+            child: const SizedBox(
               width: 100.0,
               height: 100.0,
             ),
@@ -152,7 +150,7 @@ void main() {
       await tester.pumpWidget(
         Center(
           child: Listener(
-            child: Container(
+            child: const SizedBox(
               width: 100.0,
               height: 100.0,
             ),
@@ -170,8 +168,8 @@ void main() {
       expect(enter, isNotNull);
       expect(enter.position, equals(const Offset(400.0, 300.0)));
       expect(exit, isNull);
-      await tester.pumpWidget(Center(
-        child: Container(
+      await tester.pumpWidget(const Center(
+        child: SizedBox(
           width: 100.0,
           height: 100.0,
         ),
@@ -284,7 +282,7 @@ void main() {
           children: <Widget>[
             Listener(
               key: key1,
-              child: Container(
+              child: const SizedBox(
                 width: 100.0,
                 height: 100.0,
               ),
@@ -294,7 +292,7 @@ void main() {
             ),
             Listener(
               key: key2,
-              child: Container(
+              child: const SizedBox(
                 width: 100.0,
                 height: 100.0,
               ),
@@ -438,7 +436,7 @@ void main() {
       events.clear();
     });
 
-    testWidgets('needsCompositing updates correctly and is respected', (WidgetTester tester) async {
+    testWidgets('needsCompositing is always false', (WidgetTester tester) async {
       // Pretend that we have a mouse connected.
       final TestGesture gesture = await tester.createGesture(kind: PointerDeviceKind.mouse);
       await gesture.addPointer(location: Offset.zero);
@@ -469,22 +467,9 @@ void main() {
           ),
         ),
       );
-      expect(listener.needsCompositing, isTrue);
-      // Compositing is required, therefore a dedicated TransformLayer for
-      // `Transform.scale` is added.
-      expect(tester.layers.whereType<TransformLayer>(), hasLength(2));
-
-      await tester.pumpWidget(
-        Transform.scale(
-          scale: 2.0,
-          child: Listener(
-            onPointerDown: (PointerDownEvent _) { },
-          ),
-        ),
-      );
       expect(listener.needsCompositing, isFalse);
-      // TransformLayer for `Transform.scale` is removed again as transform is
-      // executed directly on the canvas.
+      // If compositing was required, a dedicated TransformLayer for
+      // `Transform.scale` would be added.
       expect(tester.layers.whereType<TransformLayer>(), hasLength(1));
     });
 
@@ -561,7 +546,7 @@ void main() {
             onPointerEnter: (PointerEnterEvent e) => enter.add(e),
             onPointerHover: (PointerHoverEvent e) => hover.add(e),
             onPointerExit: (PointerExitEvent e) => exit.add(e),
-            child: Container(
+            child: const SizedBox(
               height: 100.0,
               width: 100.0,
             ),
@@ -574,7 +559,7 @@ void main() {
       await gesture.addPointer(location: Offset.zero);
       addTearDown(() => gesture?.removePointer());
       await tester.pumpAndSettle();
-      await gesture.moveTo(tester.getCenter(find.byType(Container)));
+      await gesture.moveTo(tester.getCenter(find.byType(SizedBox)));
 
       expect(enter.length, 1);
       expect(enter.single.position, const Offset(400.0, 300.0));

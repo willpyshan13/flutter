@@ -5,6 +5,7 @@
 import 'dart:async';
 
 import 'package:coverage/coverage.dart' as coverage;
+import 'package:vm_service/vm_service.dart' as vm_service;
 
 import '../base/file_system.dart';
 import '../base/io.dart';
@@ -65,7 +66,11 @@ class CoverageCollector extends TestWatcher {
     assert(data != null);
 
     _logMessage('($observatoryUri): collected coverage data; merging...');
-    _addHitmap(coverage.createHitmap(data['coverage'] as List<Map<String, dynamic>>));
+    _addHitmap(await coverage.createHitmap(
+      data['coverage'] as List<Map<String, dynamic>>,
+      packagesPath: globalPackagesPath,
+      checkIgnoredLines: true,
+    ));
     _logMessage('($observatoryUri): done merging coverage data into global coverage map.');
   }
 
@@ -97,7 +102,11 @@ class CoverageCollector extends TestWatcher {
     assert(data != null);
 
     _logMessage('pid $pid ($observatoryUri): collected coverage data; merging...');
-    _addHitmap(coverage.createHitmap(data['coverage'] as List<Map<String, dynamic>>));
+    _addHitmap(await coverage.createHitmap(
+      data['coverage'] as List<Map<String, dynamic>>,
+      packagesPath: globalPackagesPath,
+      checkIgnoredLines: true,
+    ));
     _logMessage('pid $pid ($observatoryUri): done merging coverage data into global coverage map.');
   }
 
@@ -114,7 +123,7 @@ class CoverageCollector extends TestWatcher {
       return null;
     }
     if (formatter == null) {
-      final coverage.Resolver resolver = coverage.Resolver(packagesPath: PackageMap.globalPackagesPath);
+      final coverage.Resolver resolver = coverage.Resolver(packagesPath: globalPackagesPath);
       final String packagePath = globals.fs.currentDirectory.path;
       final List<String> reportOn = coverageDirectory == null
         ? <String>[globals.fs.path.join(packagePath, 'lib')]
@@ -176,32 +185,42 @@ class CoverageCollector extends TestWatcher {
     }
     return true;
   }
+
+  @override
+  Future<void> handleTestCrashed(ProcessEvent event) async { }
+
+  @override
+  Future<void> handleTestTimedOut(ProcessEvent event) async { }
 }
 
-Future<VMService> _defaultConnect(Uri serviceUri) {
-  return VMService.connect(
+Future<vm_service.VmService> _defaultConnect(Uri serviceUri) {
+  return connectToVmService(
       serviceUri, compression: CompressionOptions.compressionOff);
 }
 
 Future<Map<String, dynamic>> collect(Uri serviceUri, bool Function(String) libraryPredicate, {
   bool waitPaused = false,
   String debugName,
-  Future<VMService> Function(Uri) connector = _defaultConnect,
+  Future<vm_service.VmService> Function(Uri) connector = _defaultConnect,
 }) async {
-  final VMService vmService = await connector(serviceUri);
-  await vmService.getVM();
+  final vm_service.VmService vmService = await connector(serviceUri);
   final Map<String, dynamic> result = await _getAllCoverage(
       vmService, libraryPredicate);
-  await vmService.close();
+  vmService.dispose();
   return result;
 }
 
-Future<Map<String, dynamic>> _getAllCoverage(VMService service, bool Function(String) libraryPredicate) async {
-  await service.getVM();
+Future<Map<String, dynamic>> _getAllCoverage(vm_service.VmService service, bool Function(String) libraryPredicate) async {
+  final vm_service.VM vm = await service.getVM();
   final List<Map<String, dynamic>> coverage = <Map<String, dynamic>>[];
-  for (final Isolate isolateRef in service.vm.isolates) {
-    await isolateRef.load();
-    final Map<String, dynamic> scriptList = await isolateRef.invokeRpcRaw('getScripts', params: <String, dynamic>{'isolateId': isolateRef.id});
+  for (final vm_service.IsolateRef isolateRef in vm.isolates) {
+    Map<String, Object> scriptList;
+    try {
+      final vm_service.ScriptList actualScriptList = await service.getScripts(isolateRef.id);
+      scriptList = actualScriptList.json;
+    } on vm_service.SentinelException {
+      continue;
+    }
     final List<Future<void>> futures = <Future<void>>[];
 
     final Map<String, Map<String, dynamic>> scripts = <String, Map<String, dynamic>>{};
@@ -209,36 +228,28 @@ Future<Map<String, dynamic>> _getAllCoverage(VMService service, bool Function(St
     // For each ScriptRef loaded into the VM, load the corresponding Script and
     // SourceReport object.
 
-    // We may receive such objects as
-    // {type: Sentinel, kind: Collected, valueAsString: <collected>}
-    // that need to be skipped.
-    if (scriptList['scripts'] == null) {
-      continue;
-    }
     for (final Map<String, dynamic> script in (scriptList['scripts'] as List<dynamic>).cast<Map<String, dynamic>>()) {
       if (!libraryPredicate(script['uri'] as String)) {
         continue;
       }
       final String scriptId = script['id'] as String;
       futures.add(
-        isolateRef.invokeRpcRaw('getSourceReport', params: <String, dynamic>{
-          'forceCompile': true,
-          'scriptId': scriptId,
-          'isolateId': isolateRef.id,
-          'reports': <String>['Coverage'],
-        })
-        .then((Map<String, dynamic> report) {
-          sourceReports[scriptId] = report;
+        service.getSourceReport(
+          isolateRef.id,
+          <String>['Coverage'],
+          scriptId: scriptId,
+          forceCompile: true,
+        )
+        .then((vm_service.SourceReport report) {
+          sourceReports[scriptId] = report.json;
         })
       );
       futures.add(
-        isolateRef.invokeRpcRaw('getObject', params: <String, dynamic>{
-          'isolateId': isolateRef.id,
-          'objectId': scriptId,
-        })
-        .then((Map<String, dynamic> script) {
-          scripts[scriptId] = script;
-        })
+        service
+          .getObject(isolateRef.id, scriptId)
+          .then((vm_service.Obj script) {
+            scripts[scriptId] = script.json;
+          })
       );
     }
     await Future.wait(futures);

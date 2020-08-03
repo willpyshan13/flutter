@@ -2,6 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+// @dart = 2.8
+
 import 'dart:async';
 import 'dart:math' as math;
 import 'dart:ui' as ui;
@@ -22,9 +24,47 @@ import 'theme.dart';
 // RangeValues _dollarsRange = RangeValues(50, 100);
 // void setState(VoidCallback fn) { }
 
+/// [RangeSlider] uses this callback to paint the value indicator on the overlay.
+/// Since the value indicator is painted on the Overlay; this method paints the
+/// value indicator in a [RenderBox] that appears in the [Overlay].
+typedef PaintRangeValueIndicator = void Function(PaintingContext context, Offset offset);
+
 /// A Material Design range slider.
 ///
 /// Used to select a range from a range of values.
+///
+/// {@tool dartpad --template=stateful_widget_scaffold}
+///
+/// ![A range slider widget, consisting of 5 divisions and showing the default
+/// value indicator.](https://flutter.github.io/assets-for-api-docs/assets/material/range_slider.png)
+///
+/// This range values are in intervals of 20 because the Range Slider has 5
+/// divisions, from 0 to 100. This means are values are split between 0, 20, 40,
+/// 60, 80, and 100. The range values are initialized with 40 and 80 in this demo.
+///
+/// ```dart
+/// RangeValues _currentRangeValues = const RangeValues(40, 80);
+///
+/// @override
+/// Widget build(BuildContext context) {
+///   return RangeSlider(
+///     values: _currentRangeValues,
+///     min: 0,
+///     max: 100,
+///     divisions: 5,
+///     labels: RangeLabels(
+///       _currentRangeValues.start.round().toString(),
+///       _currentRangeValues.end.round().toString(),
+///     ),
+///     onChanged: (RangeValues values) {
+///       setState(() {
+///         _currentRangeValues = values;
+///       });
+///     },
+///   );
+/// }
+/// ```
+/// {@end-tool}
 ///
 /// A range slider can be used to select from either a continuous or a discrete
 /// set of values. The default is to use a continuous range of values from [min]
@@ -54,7 +94,7 @@ import 'theme.dart';
 /// The range slider widget itself does not maintain any state. Instead, when
 /// the state of the slider changes, the widget calls the [onChanged] callback.
 /// Most widgets that use a range slider will listen for the [onChanged] callback
-/// and rebuild the slider with a new [value] to update the visual appearance of
+/// and rebuild the slider with new [values] to update the visual appearance of
 /// the slider. To know when the value starts to change, or when it is done
 /// changing, set the optional callbacks [onChangeStart] and/or [onChangeEnd].
 ///
@@ -273,9 +313,9 @@ class RangeSlider extends StatefulWidget {
   /// There are two labels: one for the start thumb and one for the end thumb.
   ///
   /// Each label is rendered using the active [ThemeData]'s
-  /// [ThemeData.textTheme.bodyText1] text style, with the
-  /// theme data's [ThemeData.colorScheme.onPrimaryColor]. The label's text
-  /// style can be overridden with [SliderThemeData.valueIndicatorTextStyle].
+  /// [TextTheme.bodyText1] text style, with the theme data's
+  /// [ColorScheme.onPrimary] color. The label's text style can be overridden
+  /// with [SliderThemeData.valueIndicatorTextStyle].
   ///
   /// If null, then the value indicator will not be displayed.
   ///
@@ -325,13 +365,13 @@ class RangeSlider extends StatefulWidget {
   ///       _dollarsRange = newValues;
   ///     });
   ///   },
-  ///   semanticFormatterCallback: (RangeValues rangeValues) {
-  ///     return '${rangeValues.start.round()} - ${rangeValues.end.round()} dollars';
+  ///   semanticFormatterCallback: (double newValue) {
+  ///     return '${newValue.round()} dollars';
   ///   }
   ///  )
   /// ```
   /// {@end-tool}
-  final RangeSemanticFormatterCallback semanticFormatterCallback;
+  final SemanticFormatterCallback semanticFormatterCallback;
 
   // Touch width for the tap boundary of the slider thumbs.
   static const double _minTouchTargetWidth = kMinInteractiveDimension;
@@ -354,7 +394,7 @@ class RangeSlider extends StatefulWidget {
     properties.add(StringProperty('labelEnd', labels?.end));
     properties.add(ColorProperty('activeColor', activeColor));
     properties.add(ColorProperty('inactiveColor', inactiveColor));
-    properties.add(ObjectFlagProperty<ValueChanged<RangeValues>>.has('semanticFormatterCallback', semanticFormatterCallback));
+    properties.add(ObjectFlagProperty<ValueChanged<double>>.has('semanticFormatterCallback', semanticFormatterCallback));
   }
 }
 
@@ -377,6 +417,10 @@ class _RangeSliderState extends State<RangeSlider> with TickerProviderStateMixin
   AnimationController startPositionController;
   AnimationController endPositionController;
   Timer interactionTimer;
+  // Value Indicator paint Animation that appears on the Overlay.
+  PaintRangeValueIndicator paintTopValueIndicator;
+  PaintRangeValueIndicator paintBottomValueIndicator;
+
 
   @override
   void initState() {
@@ -430,6 +474,10 @@ class _RangeSliderState extends State<RangeSlider> with TickerProviderStateMixin
     enableController.dispose();
     startPositionController.dispose();
     endPositionController.dispose();
+    if (overlayEntry != null) {
+      overlayEntry.remove();
+      overlayEntry = null;
+    }
     super.dispose();
   }
 
@@ -520,14 +568,7 @@ class _RangeSliderState extends State<RangeSlider> with TickerProviderStateMixin
     return null;
   };
 
-  static const double _defaultTrackHeight = 2;
-  static const RangeSliderTrackShape _defaultTrackShape = RoundedRectRangeSliderTrackShape();
-  static const RangeSliderTickMarkShape _defaultTickMarkShape = RoundRangeSliderTickMarkShape();
-  static const SliderComponentShape _defaultOverlayShape = RoundSliderOverlayShape();
-  static const RangeSliderThumbShape _defaultThumbShape = RoundRangeSliderThumbShape();
-  static const RangeSliderValueIndicatorShape _defaultValueIndicatorShape = PaddleRangeSliderValueIndicatorShape();
-  static const ShowValueIndicator _defaultShowValueIndicator = ShowValueIndicator.onlyForDiscrete;
-  static const double _defaultMinThumbSeparation = 8;
+
 
   @override
   Widget build(BuildContext context) {
@@ -543,6 +584,28 @@ class _RangeSliderState extends State<RangeSlider> with TickerProviderStateMixin
     // colors come from the ThemeData.colorScheme. These colors, along with
     // the default shapes and text styles are aligned to the Material
     // Guidelines.
+
+    const double _defaultTrackHeight = 4;
+    const RangeSliderTrackShape _defaultTrackShape = RoundedRectRangeSliderTrackShape();
+    const RangeSliderTickMarkShape _defaultTickMarkShape = RoundRangeSliderTickMarkShape();
+    const SliderComponentShape _defaultOverlayShape = RoundSliderOverlayShape();
+    const RangeSliderThumbShape _defaultThumbShape = RoundRangeSliderThumbShape();
+    const RangeSliderValueIndicatorShape _defaultValueIndicatorShape = RectangularRangeSliderValueIndicatorShape();
+    const ShowValueIndicator _defaultShowValueIndicator = ShowValueIndicator.onlyForDiscrete;
+    const double _defaultMinThumbSeparation = 8;
+
+    // The value indicator's color is not the same as the thumb and active track
+    // (which can be defined by activeColor) if the
+    // RectangularSliderValueIndicatorShape is used. In all other cases, the
+    // value indicator is assumed to be the same as the active color.
+    final RangeSliderValueIndicatorShape valueIndicatorShape = sliderTheme.rangeValueIndicatorShape ?? _defaultValueIndicatorShape;
+    Color valueIndicatorColor;
+    if (valueIndicatorShape is RectangularRangeSliderValueIndicatorShape) {
+      valueIndicatorColor = sliderTheme.valueIndicatorColor ?? Color.alphaBlend(theme.colorScheme.onSurface.withOpacity(0.60), theme.colorScheme.surface.withOpacity(0.90));
+    } else {
+      valueIndicatorColor = widget.activeColor ?? sliderTheme.valueIndicatorColor ?? theme.colorScheme.primary;
+    }
+
     sliderTheme = sliderTheme.copyWith(
       trackHeight: sliderTheme.trackHeight ?? _defaultTrackHeight,
       activeTrackColor: widget.activeColor ?? sliderTheme.activeTrackColor ?? theme.colorScheme.primary,
@@ -555,14 +618,14 @@ class _RangeSliderState extends State<RangeSlider> with TickerProviderStateMixin
       disabledInactiveTickMarkColor: sliderTheme.disabledInactiveTickMarkColor ?? theme.colorScheme.onSurface.withOpacity(0.12),
       thumbColor: widget.activeColor ?? sliderTheme.thumbColor ?? theme.colorScheme.primary,
       overlappingShapeStrokeColor: sliderTheme.overlappingShapeStrokeColor ?? theme.colorScheme.surface,
-      disabledThumbColor: sliderTheme.disabledThumbColor ?? theme.colorScheme.onSurface.withOpacity(0.38),
+      disabledThumbColor: sliderTheme.disabledThumbColor ?? Color.alphaBlend(theme.colorScheme.onSurface.withOpacity(.38), theme.colorScheme.surface),
       overlayColor: widget.activeColor?.withOpacity(0.12) ?? sliderTheme.overlayColor ?? theme.colorScheme.primary.withOpacity(0.12),
-      valueIndicatorColor: widget.activeColor ?? sliderTheme.valueIndicatorColor ?? theme.colorScheme.primary,
+      valueIndicatorColor: valueIndicatorColor,
       rangeTrackShape: sliderTheme.rangeTrackShape ?? _defaultTrackShape,
       rangeTickMarkShape: sliderTheme.rangeTickMarkShape ?? _defaultTickMarkShape,
       rangeThumbShape: sliderTheme.rangeThumbShape ?? _defaultThumbShape,
       overlayShape: sliderTheme.overlayShape ?? _defaultOverlayShape,
-      rangeValueIndicatorShape: sliderTheme.rangeValueIndicatorShape ?? _defaultValueIndicatorShape,
+      rangeValueIndicatorShape: valueIndicatorShape,
       showValueIndicator: sliderTheme.showValueIndicator ?? _defaultShowValueIndicator,
       valueIndicatorTextStyle: sliderTheme.valueIndicatorTextStyle ?? theme.textTheme.bodyText1.copyWith(
         color: theme.colorScheme.onPrimary,
@@ -571,18 +634,47 @@ class _RangeSliderState extends State<RangeSlider> with TickerProviderStateMixin
       thumbSelector: sliderTheme.thumbSelector ?? _defaultRangeThumbSelector,
     );
 
-    return _RangeSliderRenderObjectWidget(
-      values: _unlerpRangeValues(widget.values),
-      divisions: widget.divisions,
-      labels: widget.labels,
-      sliderTheme: sliderTheme,
-      textScaleFactor: MediaQuery.of(context).textScaleFactor,
-      onChanged: (widget.onChanged != null) && (widget.max > widget.min) ? _handleChanged : null,
-      onChangeStart: widget.onChangeStart != null ? _handleDragStart : null,
-      onChangeEnd: widget.onChangeEnd != null ? _handleDragEnd : null,
-      state: this,
-      semanticFormatterCallback: widget.semanticFormatterCallback,
+    // This size is used as the max bounds for the painting of the value
+    // indicators. It must be kept in sync with the function with the same name
+    // in slider.dart.
+    Size _screenSize() => MediaQuery.of(context).size;
+
+    return CompositedTransformTarget(
+      link: _layerLink,
+      child: _RangeSliderRenderObjectWidget(
+        values: _unlerpRangeValues(widget.values),
+        divisions: widget.divisions,
+        labels: widget.labels,
+        sliderTheme: sliderTheme,
+        textScaleFactor: MediaQuery.of(context).textScaleFactor,
+        screenSize: _screenSize(),
+        onChanged: (widget.onChanged != null) && (widget.max > widget.min) ? _handleChanged : null,
+        onChangeStart: widget.onChangeStart != null ? _handleDragStart : null,
+        onChangeEnd: widget.onChangeEnd != null ? _handleDragEnd : null,
+        state: this,
+        semanticFormatterCallback: widget.semanticFormatterCallback,
+      ),
     );
+  }
+
+  final LayerLink _layerLink = LayerLink();
+
+  OverlayEntry overlayEntry;
+
+  void showValueIndicator() {
+    if (overlayEntry == null) {
+      overlayEntry = OverlayEntry(
+        builder: (BuildContext context) {
+          return CompositedTransformFollower(
+            link: _layerLink,
+            child: _ValueIndicatorRenderObjectWidget(
+              state: this,
+            ),
+          );
+        },
+      );
+      Overlay.of(context).insert(overlayEntry);
+    }
   }
 }
 
@@ -594,6 +686,7 @@ class _RangeSliderRenderObjectWidget extends LeafRenderObjectWidget {
     this.labels,
     this.sliderTheme,
     this.textScaleFactor,
+    this.screenSize,
     this.onChanged,
     this.onChangeStart,
     this.onChangeEnd,
@@ -606,10 +699,11 @@ class _RangeSliderRenderObjectWidget extends LeafRenderObjectWidget {
   final RangeLabels labels;
   final SliderThemeData sliderTheme;
   final double textScaleFactor;
+  final Size screenSize;
   final ValueChanged<RangeValues> onChanged;
   final ValueChanged<RangeValues> onChangeStart;
   final ValueChanged<RangeValues> onChangeEnd;
-  final RangeSemanticFormatterCallback semanticFormatterCallback;
+  final SemanticFormatterCallback semanticFormatterCallback;
   final _RangeSliderState state;
 
   @override
@@ -621,6 +715,7 @@ class _RangeSliderRenderObjectWidget extends LeafRenderObjectWidget {
       sliderTheme: sliderTheme,
       theme: Theme.of(context),
       textScaleFactor: textScaleFactor,
+      screenSize: screenSize,
       onChanged: onChanged,
       onChangeStart: onChangeStart,
       onChangeEnd: onChangeEnd,
@@ -640,6 +735,7 @@ class _RangeSliderRenderObjectWidget extends LeafRenderObjectWidget {
       ..sliderTheme = sliderTheme
       ..theme = Theme.of(context)
       ..textScaleFactor = textScaleFactor
+      ..screenSize = screenSize
       ..onChanged = onChanged
       ..onChangeStart = onChangeStart
       ..onChangeEnd = onChangeEnd
@@ -657,9 +753,10 @@ class _RenderRangeSlider extends RenderBox with RelayoutWhenSystemFontsChangeMix
     SliderThemeData sliderTheme,
     ThemeData theme,
     double textScaleFactor,
+    Size screenSize,
     TargetPlatform platform,
     ValueChanged<RangeValues> onChanged,
-    RangeSemanticFormatterCallback semanticFormatterCallback,
+    SemanticFormatterCallback semanticFormatterCallback,
     this.onChangeStart,
     this.onChangeEnd,
     @required _RangeSliderState state,
@@ -677,6 +774,7 @@ class _RenderRangeSlider extends RenderBox with RelayoutWhenSystemFontsChangeMix
         _sliderTheme = sliderTheme,
         _theme = theme,
         _textScaleFactor = textScaleFactor,
+        _screenSize = screenSize,
         _onChanged = onChanged,
         _state = state,
         _textDirection = textDirection {
@@ -700,7 +798,12 @@ class _RenderRangeSlider extends RenderBox with RelayoutWhenSystemFontsChangeMix
     _valueIndicatorAnimation = CurvedAnimation(
       parent: _state.valueIndicatorController,
       curve: Curves.fastOutSlowIn,
-    );
+    )..addStatusListener((AnimationStatus status) {
+      if (status == AnimationStatus.dismissed && _state.overlayEntry != null) {
+        _state.overlayEntry.remove();
+        _state.overlayEntry = null;
+      }
+    });
     _enableAnimation = CurvedAnimation(
       parent: _state.enableController,
       curve: Curves.easeInOut,
@@ -755,6 +858,8 @@ class _RenderRangeSlider extends RenderBox with RelayoutWhenSystemFontsChangeMix
 
   bool get isDiscrete => divisions != null && divisions > 0;
 
+  double get _minThumbSeparationValue => isDiscrete ? 0 : sliderTheme.minThumbSeparation / _trackRect.width;
+
   RangeValues get values => _values;
   RangeValues _values;
   set values(RangeValues newValues) {
@@ -794,9 +899,9 @@ class _RenderRangeSlider extends RenderBox with RelayoutWhenSystemFontsChangeMix
     markNeedsSemanticsUpdate();
   }
 
-  RangeSemanticFormatterCallback _semanticFormatterCallback;
-  RangeSemanticFormatterCallback get semanticFormatterCallback => _semanticFormatterCallback;
-  set semanticFormatterCallback(RangeSemanticFormatterCallback value) {
+  SemanticFormatterCallback _semanticFormatterCallback;
+  SemanticFormatterCallback get semanticFormatterCallback => _semanticFormatterCallback;
+  set semanticFormatterCallback(SemanticFormatterCallback value) {
     if (_semanticFormatterCallback == value)
       return;
     _semanticFormatterCallback = value;
@@ -847,6 +952,15 @@ class _RenderRangeSlider extends RenderBox with RelayoutWhenSystemFontsChangeMix
       return;
     _textScaleFactor = value;
     _updateLabelPainters();
+  }
+
+  Size get screenSize => _screenSize;
+  Size _screenSize;
+  set screenSize(Size value) {
+    if (value == screenSize)
+      return;
+    _screenSize = value;
+    markNeedsPaint();
   }
 
   ValueChanged<RangeValues> get onChanged => _onChanged;
@@ -1009,6 +1123,7 @@ class _RenderRangeSlider extends RenderBox with RelayoutWhenSystemFontsChangeMix
   }
 
   void _startInteraction(Offset globalPosition) {
+    _state.showValueIndicator();
     final double tapValue = _getValueFromGlobalPosition(globalPosition).clamp(0.0, 1.0) as double;
     _lastThumbSelection = sliderTheme.thumbSelector(textDirection, values, tapValue, _thumbSize, size, 0);
 
@@ -1047,6 +1162,10 @@ class _RenderRangeSlider extends RenderBox with RelayoutWhenSystemFontsChangeMix
   }
 
   void _handleDragUpdate(DragUpdateDetails details) {
+    if (!_state.mounted) {
+      return;
+    }
+
     final double dragValue = _getValueFromGlobalPosition(details.globalPosition);
 
     // If no selection has been made yet, test for thumb selection again now
@@ -1072,18 +1191,20 @@ class _RenderRangeSlider extends RenderBox with RelayoutWhenSystemFontsChangeMix
       }
       final double currentDragValue = _discretize(dragValue);
 
-      final double minThumbSeparationValue = isDiscrete ? 0 : sliderTheme.minThumbSeparation / _trackRect.width;
       if (_lastThumbSelection == Thumb.start) {
-        _newValues = RangeValues(math.min(currentDragValue, currentValues.end - minThumbSeparationValue), currentValues.end);
+        _newValues = RangeValues(math.min(currentDragValue, currentValues.end - _minThumbSeparationValue), currentValues.end);
       } else if (_lastThumbSelection == Thumb.end) {
-        _newValues = RangeValues(currentValues.start, math.max(currentDragValue, currentValues.start + minThumbSeparationValue));
+        _newValues = RangeValues(currentValues.start, math.max(currentDragValue, currentValues.start + _minThumbSeparationValue));
       }
       onChanged(_newValues);
     }
   }
 
   void _endInteraction() {
-    _state.overlayController.reverse();
+    if (!_state.mounted) {
+      return;
+    }
+
     if (showValueIndicator && _state.interactionTimer == null) {
       _state.valueIndicatorController.reverse();
     }
@@ -1095,6 +1216,7 @@ class _RenderRangeSlider extends RenderBox with RelayoutWhenSystemFontsChangeMix
       }
       _active = false;
     }
+    _state.overlayController.reverse();
   }
 
   void _handleDragStart(DragStartDetails details) {
@@ -1200,8 +1322,11 @@ class _RenderRangeSlider extends RenderBox with RelayoutWhenSystemFontsChangeMix
         isEnabled: isEnabled,
     );
 
+    final bool startThumbSelected = _lastThumbSelection == Thumb.start;
+    final bool endThumbSelected = _lastThumbSelection == Thumb.end;
+
     if (!_overlayAnimation.isDismissed) {
-      if (_lastThumbSelection == Thumb.start) {
+      if (startThumbSelected) {
         _sliderTheme.overlayShape.paint(
           context,
           startThumbCenter,
@@ -1215,7 +1340,7 @@ class _RenderRangeSlider extends RenderBox with RelayoutWhenSystemFontsChangeMix
           value: startValue,
         );
       }
-      if (_lastThumbSelection == Thumb.end) {
+      if (endThumbSelected) {
         _sliderTheme.overlayShape.paint(
           context,
           endThumbCenter,
@@ -1236,7 +1361,8 @@ class _RenderRangeSlider extends RenderBox with RelayoutWhenSystemFontsChangeMix
         isEnabled: isEnabled,
         sliderTheme: _sliderTheme,
       ).width;
-      final double adjustedTrackWidth = trackRect.width - tickMarkWidth;
+      final double padding = trackRect.height;
+      final double adjustedTrackWidth = trackRect.width - padding;
       // If the tick marks would be too dense, don't bother painting them.
       if (adjustedTrackWidth / divisions >= 3.0 * tickMarkWidth) {
         final double dy = trackRect.center.dy;
@@ -1244,7 +1370,7 @@ class _RenderRangeSlider extends RenderBox with RelayoutWhenSystemFontsChangeMix
           final double value = i / divisions;
           // The ticks are mapped to be within the track, so the tick mark width
           // must be subtracted from the track width.
-          final double dx = trackRect.left + value * adjustedTrackWidth + tickMarkWidth / 2;
+          final double dx = trackRect.left + value * adjustedTrackWidth + padding / 2;
           final Offset tickMarkOffset = Offset(dx, dy);
           _sliderTheme.rangeTickMarkShape.paint(
             context,
@@ -1273,22 +1399,29 @@ class _RenderRangeSlider extends RenderBox with RelayoutWhenSystemFontsChangeMix
     final double bottomValue = isLastThumbStart ? endValue : startValue;
     final double topValue = isLastThumbStart ? startValue : endValue;
     final bool shouldPaintValueIndicators = isEnabled && labels != null && !_valueIndicatorAnimation.isDismissed && showValueIndicator;
+    final Size resolvedscreenSize = screenSize.isEmpty ? size : screenSize;
 
     if (shouldPaintValueIndicators) {
-      _sliderTheme.rangeValueIndicatorShape.paint(
-        context,
-        bottomThumbCenter,
-        activationAnimation: _valueIndicatorAnimation,
-        enableAnimation: _enableAnimation,
-        isDiscrete: isDiscrete,
-        isOnTop: false,
-        labelPainter: bottomLabelPainter,
-        parentBox: this,
-        sliderTheme: _sliderTheme,
-        textDirection: _textDirection,
-        thumb: bottomThumb,
-        value: bottomValue,
-      );
+      _state.paintBottomValueIndicator = (PaintingContext context, Offset offset) {
+        if (attached) {
+          _sliderTheme.rangeValueIndicatorShape.paint(
+            context,
+            bottomThumbCenter,
+            activationAnimation: _valueIndicatorAnimation,
+            enableAnimation: _enableAnimation,
+            isDiscrete: isDiscrete,
+            isOnTop: false,
+            labelPainter: bottomLabelPainter,
+            parentBox: this,
+            sliderTheme: _sliderTheme,
+            textDirection: _textDirection,
+            thumb: bottomThumb,
+            value: bottomValue,
+            textScaleFactor: textScaleFactor,
+            sizeWithOverflow: resolvedscreenSize,
+          );
+        }
+      };
     }
 
     _sliderTheme.rangeThumbShape.paint(
@@ -1301,6 +1434,7 @@ class _RenderRangeSlider extends RenderBox with RelayoutWhenSystemFontsChangeMix
       textDirection: textDirection,
       sliderTheme: _sliderTheme,
       thumb: bottomThumb,
+      isPressed: bottomThumb == Thumb.start ? startThumbSelected : endThumbSelected,
     );
 
     if (shouldPaintValueIndicators) {
@@ -1309,15 +1443,29 @@ class _RenderRangeSlider extends RenderBox with RelayoutWhenSystemFontsChangeMix
         center: startThumbCenter,
         labelPainter: _startLabelPainter,
         activationAnimation: _valueIndicatorAnimation,
+        textScaleFactor: textScaleFactor,
+        sizeWithOverflow: resolvedscreenSize,
       );
       final double endOffset = sliderTheme.rangeValueIndicatorShape.getHorizontalShift(
         parentBox: this,
         center: endThumbCenter,
         labelPainter: _endLabelPainter,
         activationAnimation: _valueIndicatorAnimation,
+        textScaleFactor: textScaleFactor,
+        sizeWithOverflow: resolvedscreenSize,
       );
-      final double startHalfWidth = sliderTheme.rangeValueIndicatorShape.getPreferredSize(isEnabled, isDiscrete, labelPainter: _startLabelPainter).width / 2;
-      final double endHalfWidth = sliderTheme.rangeValueIndicatorShape.getPreferredSize(isEnabled, isDiscrete, labelPainter: _endLabelPainter).width / 2;
+      final double startHalfWidth = sliderTheme.rangeValueIndicatorShape.getPreferredSize(
+        isEnabled,
+        isDiscrete,
+        labelPainter: _startLabelPainter,
+        textScaleFactor: textScaleFactor,
+      ).width / 2;
+      final double endHalfWidth = sliderTheme.rangeValueIndicatorShape.getPreferredSize(
+        isEnabled,
+        isDiscrete,
+        labelPainter: _endLabelPainter,
+        textScaleFactor: textScaleFactor,
+      ).width / 2;
       double innerOverflow = startHalfWidth + endHalfWidth;
       switch (textDirection) {
         case TextDirection.ltr:
@@ -1330,92 +1478,247 @@ class _RenderRangeSlider extends RenderBox with RelayoutWhenSystemFontsChangeMix
           break;
       }
 
-      _sliderTheme.rangeValueIndicatorShape.paint(
-        context,
-        topThumbCenter,
-        activationAnimation: _valueIndicatorAnimation,
-        enableAnimation: _enableAnimation,
-        isDiscrete: isDiscrete,
-        isOnTop: thumbDelta < innerOverflow,
-        labelPainter: topLabelPainter,
-        parentBox: this,
-        sliderTheme: _sliderTheme,
-        textDirection: _textDirection,
-        thumb: topThumb,
-        value: topValue,
-      );
+      _state.paintTopValueIndicator = (PaintingContext context, Offset offset) {
+        if (attached) {
+          _sliderTheme.rangeValueIndicatorShape.paint(
+            context,
+            topThumbCenter,
+            activationAnimation: _valueIndicatorAnimation,
+            enableAnimation: _enableAnimation,
+            isDiscrete: isDiscrete,
+            isOnTop: thumbDelta < innerOverflow,
+            labelPainter: topLabelPainter,
+            parentBox: this,
+            sliderTheme: _sliderTheme,
+            textDirection: _textDirection,
+            thumb: topThumb,
+            value: topValue,
+            textScaleFactor: textScaleFactor,
+            sizeWithOverflow: resolvedscreenSize,
+          );
+        }
+      };
     }
 
     _sliderTheme.rangeThumbShape.paint(
       context,
       topThumbCenter,
-      activationAnimation: _valueIndicatorAnimation,
+      activationAnimation: _overlayAnimation,
       enableAnimation: _enableAnimation,
       isDiscrete: isDiscrete,
       isOnTop: thumbDelta < sliderTheme.rangeThumbShape.getPreferredSize(isEnabled, isDiscrete).width,
       textDirection: textDirection,
       sliderTheme: _sliderTheme,
       thumb: topThumb,
+      isPressed: topThumb == Thumb.start ? startThumbSelected : endThumbSelected,
     );
+  }
+
+  /// Describe the semantics of the start thumb.
+  SemanticsNode _startSemanticsNode = SemanticsNode();
+
+  /// Describe the semantics of the end thumb.
+  SemanticsNode _endSemanticsNode = SemanticsNode();
+
+  // Create the semantics configuration for a single value.
+  SemanticsConfiguration _createSemanticsConfiguration(
+      double value,
+      double increasedValue,
+      double decreasedValue,
+      String label,
+      VoidCallback increaseAction,
+      VoidCallback decreaseAction,
+  ) {
+    final SemanticsConfiguration config = SemanticsConfiguration();
+    config.isEnabled = isEnabled;
+    config.textDirection = textDirection;
+    if (isEnabled) {
+      config.onIncrease = increaseAction;
+      config.onDecrease = decreaseAction;
+    }
+    config.label = label ?? '';
+    if (semanticFormatterCallback != null) {
+      config.value = semanticFormatterCallback(_state._lerp(value));
+      config.increasedValue = semanticFormatterCallback(_state._lerp(increasedValue));
+      config.decreasedValue = semanticFormatterCallback(_state._lerp(decreasedValue));
+    } else {
+      config.value = '${(value * 100).round()}%';
+      config.increasedValue = '${(increasedValue * 100).round()}%';
+      config.decreasedValue = '${(decreasedValue * 100).round()}%';
+    }
+
+    return config;
+  }
+
+  @override
+  void assembleSemanticsNode(
+      SemanticsNode node,
+      SemanticsConfiguration config,
+      Iterable<SemanticsNode> children,
+  ) {
+    assert(children.isEmpty);
+
+    final SemanticsConfiguration startSemanticsConfiguration = _createSemanticsConfiguration(
+      values.start,
+      _increasedStartValue,
+      _decreasedStartValue,
+      labels?.start,
+      _increaseStartAction,
+      _decreaseStartAction,
+    );
+    final SemanticsConfiguration endSemanticsConfiguration = _createSemanticsConfiguration(
+      values.end,
+      _increasedEndValue,
+      _decreasedEndValue,
+      labels?.end,
+      _increaseEndAction,
+      _decreaseEndAction,
+    );
+
+    // Split the semantics node area between the start and end nodes.
+    final Rect leftRect = Rect.fromPoints(node.rect.topLeft, node.rect.bottomCenter);
+    final Rect rightRect = Rect.fromPoints(node.rect.topCenter, node.rect.bottomRight);
+    switch (textDirection) {
+      case TextDirection.ltr:
+        _startSemanticsNode.rect = leftRect;
+        _endSemanticsNode.rect = rightRect;
+        break;
+      case TextDirection.rtl:
+        _startSemanticsNode.rect = rightRect;
+        _endSemanticsNode.rect = leftRect;
+        break;
+    }
+
+    _startSemanticsNode.updateWith(config: startSemanticsConfiguration);
+    _endSemanticsNode.updateWith(config: endSemanticsConfiguration);
+
+    final List<SemanticsNode> finalChildren = <SemanticsNode>[
+      _startSemanticsNode,
+      _endSemanticsNode,
+    ];
+
+    node.updateWith(config: config, childrenInInversePaintOrder: finalChildren);
+  }
+
+  @override
+  void clearSemantics() {
+    super.clearSemantics();
+    _startSemanticsNode = null;
+    _endSemanticsNode = null;
   }
 
   @override
   void describeSemanticsConfiguration(SemanticsConfiguration config) {
     super.describeSemanticsConfiguration(config);
-
-    config.isSemanticBoundary = isEnabled;
-    if (isEnabled) {
-      config.textDirection = textDirection;
-      config.customSemanticsActions = <CustomSemanticsAction, VoidCallback>{
-        _decreaseStart: _decreaseStartAction,
-        _increaseStart: _increaseStartAction,
-        _decreaseEnd: _decreaseEndAction,
-        _increaseEnd: _increaseEndAction,
-      };
-      if (semanticFormatterCallback != null) {
-        config.value = semanticFormatterCallback(_state._lerpRangeValues(values));
-      } else {
-        config.value = values.toString();
-      }
-    }
+    config.isSemanticBoundary = true;
   }
-
-  final CustomSemanticsAction _decreaseStart = const CustomSemanticsAction(label: 'Decrease Min');
-  final CustomSemanticsAction _increaseStart = const CustomSemanticsAction(label: 'Increase Min');
-  final CustomSemanticsAction _decreaseEnd = const CustomSemanticsAction(label: 'Decrease Max');
-  final CustomSemanticsAction _increaseEnd = const CustomSemanticsAction(label: 'Increase Max');
 
   double get _semanticActionUnit => divisions != null ? 1.0 / divisions : _adjustmentUnit;
 
   void _increaseStartAction() {
     if (isEnabled) {
-      onChanged(RangeValues(_increaseValue(values.start), values.end));
+        onChanged(RangeValues(_increasedStartValue, values.end));
     }
   }
 
   void _decreaseStartAction() {
     if (isEnabled) {
-      onChanged(RangeValues(_decreaseValue(values.start), values.end));
+      onChanged(RangeValues(_decreasedStartValue, values.end));
     }
   }
 
   void _increaseEndAction() {
     if (isEnabled) {
-      onChanged(RangeValues(values.start, _increaseValue(values.end)));
+      onChanged(RangeValues(values.start, _increasedEndValue));
     }
   }
 
   void _decreaseEndAction() {
     if (isEnabled) {
-      onChanged(RangeValues(values.start, _decreaseValue(values.end)));
+      onChanged(RangeValues(values.start, _decreasedEndValue));
     }
   }
 
-  double _increaseValue(double value) {
-    return (value + _semanticActionUnit).clamp(0.0, 1.0) as double;
+  double get _increasedStartValue {
+    // Due to floating-point operations, this value can actually be greater than
+    // expected (e.g. 0.4 + 0.2 = 0.600000000001), so we limit to 2 decimal points.
+    final double increasedStartValue = double.parse((values.start + _semanticActionUnit).toStringAsFixed(2));
+    return increasedStartValue <= values.end - _minThumbSeparationValue ? increasedStartValue : values.start;
   }
 
-  double _decreaseValue(double value) {
-    return (value - _semanticActionUnit).clamp(0.0, 1.0) as double;
+  double get _decreasedStartValue {
+    return (values.start - _semanticActionUnit).clamp(0.0, 1.0) as double;
+  }
+
+  double get _increasedEndValue {
+    return (values.end + _semanticActionUnit).clamp(0.0, 1.0) as double;
+  }
+
+  double get _decreasedEndValue {
+    final double decreasedEndValue = values.end - _semanticActionUnit;
+    return decreasedEndValue >= values.start + _minThumbSeparationValue ? decreasedEndValue : values.end;
+  }
+}
+
+
+class _ValueIndicatorRenderObjectWidget extends LeafRenderObjectWidget {
+  const _ValueIndicatorRenderObjectWidget({
+    this.state,
+  });
+
+  final _RangeSliderState state;
+
+  @override
+  _RenderValueIndicator createRenderObject(BuildContext context) {
+    return _RenderValueIndicator(
+      state: state,
+    );
+  }
+  @override
+  void updateRenderObject(BuildContext context, _RenderValueIndicator renderObject) {
+    renderObject._state = state;
+  }
+}
+
+class _RenderValueIndicator extends RenderBox with RelayoutWhenSystemFontsChangeMixin {
+  _RenderValueIndicator({
+    _RangeSliderState state,
+  }) :_state = state {
+    _valueIndicatorAnimation = CurvedAnimation(
+      parent: _state.valueIndicatorController,
+      curve: Curves.fastOutSlowIn,
+    );
+  }
+
+  Animation<double> _valueIndicatorAnimation;
+  _RangeSliderState _state;
+
+  @override
+  bool get sizedByParent => true;
+
+  @override
+  void attach(PipelineOwner owner) {
+    super.attach(owner);
+    _valueIndicatorAnimation.addListener(markNeedsPaint);
+    _state.startPositionController.addListener(markNeedsPaint);
+    _state.endPositionController.addListener(markNeedsPaint);
+  }
+
+  @override
+  void detach() {
+    _valueIndicatorAnimation.removeListener(markNeedsPaint);
+    _state.startPositionController.removeListener(markNeedsPaint);
+    _state.endPositionController.removeListener(markNeedsPaint);
+    super.detach();
+  }
+
+  @override
+  void paint(PaintingContext context, Offset offset) {
+    if (_state.paintBottomValueIndicator != null) {
+      _state.paintBottomValueIndicator(context, offset);
+    }
+    if (_state.paintTopValueIndicator != null) {
+      _state.paintTopValueIndicator(context, offset);
+    }
   }
 }

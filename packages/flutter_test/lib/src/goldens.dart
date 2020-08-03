@@ -96,7 +96,7 @@ abstract class GoldenFileComparator {
 
   /// Returns a [ComparisonResult] to describe the pixel differential of the
   /// [test] and [master] image bytes provided.
-  static ComparisonResult compareLists(List<int> test, List<int> master) {
+  static Future<ComparisonResult> compareLists(List<int> test, List<int> master) {
     return _goldens.compareLists(test, master);
   }
 }
@@ -221,7 +221,7 @@ abstract class WebGoldenComparator {
 /// updates the files on disk to match the rendering.
 ///
 /// When using `flutter run`, the default comparator
-/// ([_TrivialWebGoldenComparator]) is used. It prints a message to the console
+/// (`_TrivialWebGoldenComparator`) is used. It prints a message to the console
 /// but otherwise does nothing. This allows tests to be developed visually on a
 /// web browser.
 ///

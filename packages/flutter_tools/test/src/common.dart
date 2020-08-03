@@ -4,21 +4,26 @@
 
 import 'dart:async';
 
+import 'package:args/args.dart';
 import 'package:args/command_runner.dart';
+import 'package:flutter_tools/src/base/logger.dart';
+import 'package:flutter_tools/src/convert.dart';
+import 'package:vm_service/vm_service.dart' as vm_service;
+
 import 'package:flutter_tools/src/base/common.dart';
 import 'package:flutter_tools/src/base/context.dart';
 import 'package:flutter_tools/src/base/file_system.dart';
-
-import 'package:flutter_tools/src/base/process.dart';
+import 'package:flutter_tools/src/base/io.dart';
 import 'package:flutter_tools/src/commands/create.dart';
 import 'package:flutter_tools/src/runner/flutter_command.dart';
 import 'package:flutter_tools/src/runner/flutter_command_runner.dart';
 import 'package:flutter_tools/src/globals.dart' as globals;
 import 'package:meta/meta.dart';
+import 'package:quiver/testing/async.dart';
 import 'package:test_api/test_api.dart' as test_package show TypeMatcher, test; // ignore: deprecated_member_use
 import 'package:test_api/test_api.dart' hide TypeMatcher, isInstanceOf; // ignore: deprecated_member_use
 // ignore: deprecated_member_use
-export 'package:test_core/test_core.dart' hide TypeMatcher, isInstanceOf; // Defines a 'package:test' shim.
+export 'package:test_core/test_core.dart' hide TypeMatcher, isInstanceOf, test; // Defines a 'package:test' shim.
 
 /// A matcher that compares the type of the actual value to the type argument T.
 // TODO(ianh): Remove this once https://github.com/dart-lang/matcher/issues/98 is fixed
@@ -29,7 +34,9 @@ void tryToDelete(Directory directory) {
   // on Windows it's common for deletions to fail due to
   // bogus (we think) "access denied" errors.
   try {
-    directory.deleteSync(recursive: true);
+    if (directory.existsSync()) {
+      directory.deleteSync(recursive: true);
+    }
   } on FileSystemException catch (error) {
     print('Failed to delete ${directory.path}: $error');
   }
@@ -74,21 +81,11 @@ String getFlutterRoot() {
 }
 
 CommandRunner<void> createTestCommandRunner([ FlutterCommand command ]) {
-  final FlutterCommandRunner runner = FlutterCommandRunner();
+  final FlutterCommandRunner runner = TestFlutterCommandRunner();
   if (command != null) {
     runner.addCommand(command);
   }
   return runner;
-}
-
-/// Updates [path] to have a modification time [seconds] from now.
-void updateFileModificationTime(
-  String path,
-  DateTime baseTime,
-  int seconds,
-) {
-  final DateTime modificationTime = baseTime.add(Duration(seconds: seconds));
-  globals.fs.file(path).setLastModifiedSync(modificationTime);
 }
 
 /// Matcher for functions that throw [AssertionError].
@@ -109,15 +106,17 @@ Matcher throwsToolExit({ int exitCode, Pattern message }) {
 /// Matcher for [ToolExit]s.
 final test_package.TypeMatcher<ToolExit> isToolExit = isA<ToolExit>();
 
-/// Matcher for functions that throw [ProcessExit].
-Matcher throwsProcessExit([ dynamic exitCode ]) {
-  return exitCode == null
-      ? throwsA(isProcessExit)
-      : throwsA(allOf(isProcessExit, (ProcessExit e) => e.exitCode == exitCode));
+/// Matcher for functions that throw [ProcessException].
+Matcher throwsProcessException({ Pattern message }) {
+  Matcher matcher = isProcessException;
+  if (message != null) {
+    matcher = allOf(matcher, (ProcessException e) => e.message?.contains(message));
+  }
+  return throwsA(matcher);
 }
 
-/// Matcher for [ProcessExit]s.
-final test_package.TypeMatcher<ProcessExit> isProcessExit = isA<ProcessExit>();
+/// Matcher for [ProcessException]s.
+final test_package.TypeMatcher<ProcessException> isProcessException = isA<ProcessException>();
 
 /// Creates a flutter project in the [temp] directory using the
 /// [arguments] list if specified, or `--no-pub` if not.
@@ -145,6 +144,44 @@ Future<void> expectToolExitLater(Future<dynamic> future, Matcher messageMatcher)
   }
 }
 
+Matcher containsIgnoringWhitespace(String toSearch) {
+  return predicate(
+    (String source) {
+      return collapseWhitespace(source).contains(collapseWhitespace(toSearch));
+    },
+    'contains "$toSearch" ignoring whitespace.',
+  );
+}
+
+/// The tool overrides `test` to ensure that files created under the
+/// system temporary directory are deleted after each test by calling
+/// `LocalFileSystem.dispose()`.
+@isTest
+void test(String description, FutureOr<void> body(), {
+  String testOn,
+  Timeout timeout,
+  dynamic skip,
+  List<String> tags,
+  Map<String, dynamic> onPlatform,
+  int retry,
+}) {
+  test_package.test(
+    description,
+    () async {
+      addTearDown(() async {
+        await LocalFileSystem.dispose();
+      });
+      return body();
+    },
+    timeout: timeout,
+    skip: skip,
+    tags: tags,
+    onPlatform: onPlatform,
+    retry: retry,
+    testOn: testOn,
+  );
+}
+
 /// Executes a test body in zone that does not allow context-based injection.
 ///
 /// For classes which have been refactored to excluded context-based injection
@@ -157,12 +194,12 @@ Future<void> expectToolExitLater(Future<dynamic> future, Matcher messageMatcher)
 void testWithoutContext(String description, FutureOr<void> body(), {
   String testOn,
   Timeout timeout,
-  bool skip,
+  dynamic skip,
   List<String> tags,
   Map<String, dynamic> onPlatform,
   int retry,
   }) {
-  return test_package.test(
+  return test(
     description, () async {
       return runZoned(body, zoneValues: <Object, Object>{
         contextKey: const NoContext(),
@@ -175,6 +212,21 @@ void testWithoutContext(String description, FutureOr<void> body(), {
     retry: retry,
     testOn: testOn,
   );
+}
+
+/// Runs a callback using FakeAsync.run while continually pumping the
+/// microtask queue. This avoids a deadlock when tests `await` a Future
+/// which queues a microtask that will not be processed unless the queue
+/// is flushed.
+Future<T> runFakeAsync<T>(Future<T> Function(FakeAsync time) f) async {
+  return FakeAsync().run((FakeAsync time) async {
+    bool pump = true;
+    final Future<T> future = f(time).whenComplete(() => pump = false);
+    while (pump) {
+      time.flushMicrotasks();
+    }
+    return future;
+  }) as Future<T>;
 }
 
 /// An implementation of [AppContext] that throws if context.get is called in the test.
@@ -206,5 +258,134 @@ class NoContext implements AppContext {
     ZoneSpecification zoneSpecification,
   }) async {
     return body();
+  }
+}
+
+/// A fake implementation of a vm_service that mocks the JSON-RPC request
+/// and response structure.
+class FakeVmServiceHost {
+  FakeVmServiceHost({
+    @required List<VmServiceExpectation> requests,
+  }) : _requests = requests {
+    _vmService = vm_service.VmService(
+      _input.stream,
+      _output.add,
+    );
+    _applyStreamListen();
+    _output.stream.listen((String data) {
+      final Map<String, Object> request = json.decode(data) as Map<String, Object>;
+      if (_requests.isEmpty) {
+        throw Exception('Unexpected request: $request');
+      }
+      final FakeVmServiceRequest fakeRequest = _requests.removeAt(0) as FakeVmServiceRequest;
+      expect(request, isA<Map<String, Object>>()
+        .having((Map<String, Object> request) => request['method'], 'method', fakeRequest.method)
+        .having((Map<String, Object> request) => request['params'], 'args', fakeRequest.args)
+      );
+      if (fakeRequest.close) {
+        _vmService.dispose();
+        expect(_requests, isEmpty);
+        return;
+      }
+      if (fakeRequest.errorCode == null) {
+        _input.add(json.encode(<String, Object>{
+          'jsonrpc': '2.0',
+          'id': request['id'],
+          'result': fakeRequest.jsonResponse ?? <String, Object>{'type': 'Success'},
+        }));
+      } else {
+        _input.add(json.encode(<String, Object>{
+          'jsonrpc': '2.0',
+          'id': request['id'],
+          'error': <String, Object>{
+            'code': fakeRequest.errorCode,
+          }
+        }));
+      }
+      _applyStreamListen();
+    });
+  }
+
+  final List<VmServiceExpectation> _requests;
+  final StreamController<String> _input = StreamController<String>();
+  final StreamController<String> _output = StreamController<String>();
+
+  vm_service.VmService get vmService => _vmService;
+  vm_service.VmService _vmService;
+
+  bool get hasRemainingExpectations => _requests.isNotEmpty;
+
+  // remove FakeStreamResponse objects from _requests until it is empty
+  // or until we hit a FakeRequest
+  void _applyStreamListen() {
+    while (_requests.isNotEmpty && !_requests.first.isRequest) {
+      final FakeVmServiceStreamResponse response = _requests.removeAt(0) as FakeVmServiceStreamResponse;
+      _input.add(json.encode(<String, Object>{
+        'jsonrpc': '2.0',
+        'method': 'streamNotify',
+        'params': <String, Object>{
+          'streamId': response.streamId,
+          'event': response.event.toJson(),
+        },
+      }));
+    }
+  }
+}
+
+abstract class VmServiceExpectation {
+  bool get isRequest;
+}
+
+class FakeVmServiceRequest implements VmServiceExpectation {
+  const FakeVmServiceRequest({
+    @required this.method,
+    this.args = const <String, Object>{},
+    this.jsonResponse,
+    this.errorCode,
+    this.close = false,
+  });
+
+  final String method;
+
+  /// When true, the vm service is automatically closed.
+  final bool close;
+
+  /// If non-null, the error code for a [vm_service.RPCError] in place of a
+  /// standard response.
+  final int errorCode;
+  final Map<String, Object> args;
+  final Map<String, Object> jsonResponse;
+
+  @override
+  bool get isRequest => true;
+}
+
+class FakeVmServiceStreamResponse implements VmServiceExpectation {
+  const FakeVmServiceStreamResponse({
+    @required this.event,
+    @required this.streamId,
+  });
+
+  final vm_service.Event event;
+  final String streamId;
+
+  @override
+  bool get isRequest => false;
+}
+
+class TestFlutterCommandRunner extends FlutterCommandRunner {
+  @override
+  Future<void> runCommand(ArgResults topLevelResults) async {
+    final Logger topLevelLogger = globals.logger;
+    final Map<Type, dynamic> contextOverrides = <Type, dynamic>{
+      if (topLevelResults['verbose'] as bool)
+        Logger: VerboseLogger(topLevelLogger),
+    };
+    return context.run<void>(
+      overrides: contextOverrides.map<Type, Generator>((Type type, dynamic value) {
+        return MapEntry<Type, Generator>(type, () => value);
+      }),
+      body: () => super.runCommand(topLevelResults),
+    );
   }
 }

@@ -4,12 +4,13 @@
 
 import 'dart:async';
 
-import 'package:platform/platform.dart';
-
+import 'package:flutter_tools/src/globals.dart' as globals;
+import 'package:flutter_tools/src/artifacts.dart';
 import 'package:flutter_tools/src/base/common.dart';
 import 'package:flutter_tools/src/base/file_system.dart';
 import 'package:flutter_tools/src/base/io.dart';
 import 'package:flutter_tools/src/base/logger.dart';
+import 'package:flutter_tools/src/base/platform.dart';
 import 'package:flutter_tools/src/base/terminal.dart';
 import 'package:flutter_tools/src/cache.dart';
 import 'package:flutter_tools/src/commands/analyze.dart';
@@ -20,7 +21,8 @@ import 'package:process/process.dart';
 import '../../src/common.dart';
 import '../../src/context.dart';
 
-final Platform _kNoColorTerminalPlatform = FakePlatform.fromPlatform(const LocalPlatform())..stdoutSupportsAnsi = false;
+final Platform _kNoColorTerminalPlatform = FakePlatform(
+  stdoutSupportsAnsi: false);
 
 void main() {
   String analyzerSeparator;
@@ -32,6 +34,7 @@ void main() {
   Directory tempDir;
   String projectPath;
   File libMain;
+  Artifacts artifacts;
 
   Future<void> runCommand({
     FlutterCommand command,
@@ -76,37 +79,44 @@ sky_engine:$flutterRootUri/bin/cache/pkg/sky_engine/lib/
 flutter_project:lib/
 ''';
     fileSystem.file(fileSystem.path.join(projectPath, '.packages'))
-        ..createSync(recursive: true)
-        ..writeAsStringSync(dotPackagesSrc);
+      ..createSync(recursive: true)
+      ..writeAsStringSync(dotPackagesSrc);
   }
 
   setUpAll(() {
     Cache.disableLocking();
     Cache.flutterRoot = FlutterCommandRunner.defaultFlutterRoot;
     processManager = const LocalProcessManager();
-    terminal = AnsiTerminal(platform: platform, stdio: Stdio());
-    fileSystem = const LocalFileSystem();
     platform = const LocalPlatform();
+    terminal = AnsiTerminal(platform: platform, stdio: Stdio());
+    fileSystem = LocalFileSystem.instance;
     logger = BufferLogger(
       outputPreferences: OutputPreferences.test(),
       terminal: terminal,
     );
     analyzerSeparator = platform.isWindows ? '-' : '•';
-    tempDir = fileSystem.systemTempDirectory.createTempSync('flutter_analyze_once_test_1.').absolute;
+    artifacts = CachedArtifacts(
+      cache: globals.cache,
+      fileSystem: fileSystem,
+      platform: platform,
+    );
+  });
+
+  setUp(() {
+    tempDir = fileSystem.systemTempDirectory.createTempSync(
+      'flutter_analyze_once_test_1.',
+    ).absolute;
     projectPath = fileSystem.path.join(tempDir.path, 'flutter_project');
     fileSystem.file(fileSystem.path.join(projectPath, 'pubspec.yaml'))
         ..createSync(recursive: true)
         ..writeAsStringSync(pubspecYamlSrc);
     _createDotPackages(projectPath);
-  });
-
-  setUp(() {
     libMain = fileSystem.file(fileSystem.path.join(projectPath, 'lib', 'main.dart'))
         ..createSync(recursive: true)
         ..writeAsStringSync(mainDartSrc);
   });
 
-  tearDownAll(() {
+  tearDown(() {
     tryToDelete(tempDir);
   });
 
@@ -120,6 +130,7 @@ flutter_project:lib/
         platform: platform,
         processManager: processManager,
         terminal: terminal,
+        artifacts: artifacts,
       ),
       arguments: <String>['analyze', '--no-pub'],
       statusTextContains: <String>['No issues found!'],
@@ -135,6 +146,7 @@ flutter_project:lib/
         logger: logger,
         processManager: processManager,
         terminal: terminal,
+        artifacts: artifacts,
       ),
       arguments: <String>['analyze', '--no-pub', libMain.path],
       toolExit: true,
@@ -173,6 +185,7 @@ flutter_project:lib/
         logger: logger,
         processManager: processManager,
         terminal: terminal,
+        artifacts: artifacts,
       ),
       arguments: <String>['analyze', '--no-pub'],
       statusTextContains: <String>[
@@ -218,6 +231,7 @@ flutter_project:lib/
           logger: logger,
           processManager: processManager,
           terminal: terminal,
+          artifacts: artifacts,
         ),
         arguments: <String>['analyze', '--no-pub'],
         statusTextContains: <String>[
@@ -264,6 +278,7 @@ void bar() {
           logger: logger,
           processManager: processManager,
           terminal: terminal,
+          artifacts: artifacts,
         ),
         arguments: <String>['analyze', '--no-pub'],
         statusTextContains: <String>[
@@ -294,8 +309,36 @@ StringBuffer bar = StringBuffer('baz');
           logger: logger,
           processManager: processManager,
           terminal: terminal,
+          artifacts: artifacts,
         ),
         arguments: <String>['analyze', '--no-pub'],
+        statusTextContains: <String>['No issues found!'],
+      );
+    } finally {
+      tryToDelete(tempDir);
+    }
+  });
+
+  testUsingContext('analyze once supports analyzing null-safe code', () async {
+    const String contents = '''
+int? bar;
+''';
+    final Directory tempDir = fileSystem.systemTempDirectory.createTempSync('flutter_analyze_once_test_null_safety.');
+    _createDotPackages(tempDir.path);
+
+    tempDir.childFile('main.dart').writeAsStringSync(contents);
+    try {
+      await runCommand(
+        command: AnalyzeCommand(
+          workingDirectory: fileSystem.directory(tempDir),
+          platform: _kNoColorTerminalPlatform,
+          fileSystem: fileSystem,
+          logger: logger,
+          processManager: processManager,
+          terminal: terminal,
+          artifacts: artifacts,
+        ),
+        arguments: <String>['analyze', '--no-pub', '--enable-experiment=non-nullable'],
         statusTextContains: <String>['No issues found!'],
       );
     } finally {
@@ -321,6 +364,7 @@ StringBuffer bar = StringBuffer('baz');
           processManager: processManager,
           logger: logger,
           fileSystem: fileSystem,
+          artifacts: artifacts,
         ),
         arguments: <String>['analyze', '--no-pub'],
         statusTextContains: <String>['No issues found!'],
