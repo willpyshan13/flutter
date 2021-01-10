@@ -3,11 +3,9 @@
 // found in the LICENSE file.
 
 
-import 'dart:async';
 import 'dart:typed_data';
 import 'dart:ui';
 
-import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
 
 import 'message_codec.dart';
@@ -568,28 +566,23 @@ class _AndroidMotionEventConverter {
       return null;
     }
 
-    int action;
-    switch (event.runtimeType) {
-      case PointerDownEvent:
-        action = numPointers == 1
-            ? AndroidViewController.kActionDown
-            : AndroidViewController.pointerAction(
-                pointerIdx, AndroidViewController.kActionPointerDown);
-        break;
-      case PointerUpEvent:
-        action = numPointers == 1
-            ? AndroidViewController.kActionUp
-            : AndroidViewController.pointerAction(
-                pointerIdx, AndroidViewController.kActionPointerUp);
-        break;
-      case PointerMoveEvent:
-        action = AndroidViewController.kActionMove;
-        break;
-      case PointerCancelEvent:
-        action = AndroidViewController.kActionCancel;
-        break;
-      default:
-        return null;
+    final int action;
+    if (event is PointerDownEvent) {
+      action = numPointers == 1
+          ? AndroidViewController.kActionDown
+          : AndroidViewController.pointerAction(
+              pointerIdx, AndroidViewController.kActionPointerDown);
+    } else if (event is PointerUpEvent) {
+      action = numPointers == 1
+          ? AndroidViewController.kActionUp
+          : AndroidViewController.pointerAction(
+              pointerIdx, AndroidViewController.kActionPointerUp);
+    } else if (event is PointerMoveEvent) {
+      action = AndroidViewController.kActionMove;
+    } else if (event is PointerCancelEvent) {
+      action = AndroidViewController.kActionCancel;
+    } else {
+      return null;
     }
 
     return AndroidMotionEvent(
@@ -854,6 +847,10 @@ abstract class AndroidViewController extends PlatformViewController {
   /// for description of the parameters.
   @override
   Future<void> dispatchPointerEvent(PointerEvent event) async {
+    if (event is PointerHoverEvent) {
+      return;
+    }
+
     if (event is PointerDownEvent) {
       _motionEventConverter.handlePointerDownEvent(event);
     }

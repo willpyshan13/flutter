@@ -12,10 +12,10 @@ import '../base/common.dart';
 import '../base/context.dart';
 import '../base/file_system.dart';
 import '../base/io.dart';
+import  '../build_info.dart';
 import '../commands/daemon.dart';
 import '../compile.dart';
 import '../device.dart';
-import '../features.dart';
 import '../fuchsia/fuchsia_device.dart';
 import '../globals.dart' as globals;
 import '../ios/devices.dart';
@@ -27,7 +27,6 @@ import '../resident_runner.dart';
 import '../run_cold.dart';
 import '../run_hot.dart';
 import '../runner/flutter_command.dart';
-import '../widget_cache.dart';
 
 /// A Flutter-command that attaches to applications that have been launched
 /// without `flutter run`.
@@ -56,8 +55,7 @@ import '../widget_cache.dart';
 /// also be provided.
 class AttachCommand extends FlutterCommand {
   AttachCommand({bool verboseHelp = false, this.hotRunnerFactory}) {
-    addBuildModeFlags(defaultToRelease: false);
-    usesIsolateFilterOption(hide: !verboseHelp);
+    addBuildModeFlags(defaultToRelease: false, excludeRelease: true);
     usesTargetOption();
     usesPortOptions();
     usesIpv6Flag();
@@ -80,7 +78,7 @@ class AttachCommand extends FlutterCommand {
         help: 'The URI at which the observatory is listening.',
       )..addOption(
         'app-id',
-        help: 'The package name (Android) or bundle identifier (iOS) for the application. '
+        help: 'The package name (Android) or bundle identifier (iOS) for the app. '
               'This can be specified to avoid being prompted if multiple observatory ports '
               'are advertised.\n'
               'If you have multiple devices or emulators running, you should include the '
@@ -103,6 +101,7 @@ class AttachCommand extends FlutterCommand {
       );
     usesTrackWidgetCreation(verboseHelp: verboseHelp);
     addDdsOptions(verboseHelp: verboseHelp);
+    usesDeviceTimeoutOption();
     hotRunnerFactory ??= HotRunnerFactory();
   }
 
@@ -112,20 +111,21 @@ class AttachCommand extends FlutterCommand {
   final String name = 'attach';
 
   @override
-  final String description = '''Attach to a running application.
+  final String description = r'''
+Attach to a running app.
 
-  For attaching to Android or iOS devices, simply using `flutter attach` is
-  usually sufficient. The tool will search for a running Flutter app or module,
-  if available. Otherwise, the tool will wait for the next Flutter app or module
-  to launch before attaching.
+For attaching to Android or iOS devices, simply using `flutter attach` is
+usually sufficient. The tool will search for a running Flutter app or module,
+if available. Otherwise, the tool will wait for the next Flutter app or module
+to launch before attaching.
 
-  For Fuchsia, the module name must be provided, e.g. `\$flutter attach
-  --module=mod_name`. This can be called either before or after the application
-  is started.
+For Fuchsia, the module name must be provided, e.g. `$flutter attach
+--module=mod_name`. This can be called either before or after the application
+is started.
 
-  If the app or module is already running and the specific observatory port is
-  known, it can be explicitly provided to attach via the command-line, e.g.
-  `\$ flutter attach --debug-port 12345`''';
+If the app or module is already running and the specific observatory port is
+known, it can be explicitly provided to attach via the command-line, e.g.
+`$ flutter attach --debug-port 12345`''';
 
   int get debugPort {
     if (argResults['debug-port'] == null) {
@@ -143,7 +143,10 @@ class AttachCommand extends FlutterCommand {
     if (argResults['debug-uri'] == null) {
       return null;
     }
-    final Uri uri = Uri.parse(stringArg('debug-uri'));
+    final Uri uri = Uri.tryParse(stringArg('debug-uri'));
+    if (uri == null) {
+      throwToolExit('Invalid `--debug-uri`: ${stringArg('debug-uri')}');
+    }
     if (!uri.hasPort) {
       throwToolExit('Port not specified for `--debug-uri`: $uri');
     }
@@ -208,6 +211,7 @@ class AttachCommand extends FlutterCommand {
 
   Future<void> _attachToDevice(Device device) async {
     final FlutterProject flutterProject = FlutterProject.current();
+
     Future<int> getDevicePort() async {
       if (debugPort != null) {
         return debugPort;
@@ -314,7 +318,14 @@ class AttachCommand extends FlutterCommand {
         try {
           app = await daemon.appDomain.launch(
             runner,
-            runner.attach,
+            ({Completer<DebugConnectionInfo> connectionInfoCompleter,
+              Completer<void> appStartedCompleter}) {
+              return runner.attach(
+                connectionInfoCompleter: connectionInfoCompleter,
+                appStartedCompleter: appStartedCompleter,
+                allowExistingDdsInstance: true,
+              );
+            },
             device,
             null,
             true,
@@ -339,12 +350,18 @@ class AttachCommand extends FlutterCommand {
         final Completer<void> onAppStart = Completer<void>.sync();
         TerminalHandler terminalHandler;
         unawaited(onAppStart.future.whenComplete(() {
-          terminalHandler = TerminalHandler(runner)
+          terminalHandler = TerminalHandler(
+            runner,
+            logger: globals.logger,
+            terminal: globals.terminal,
+            signals: globals.signals,
+          )
             ..setupTerminal()
             ..registerSignalHandlers();
         }));
         result = await runner.attach(
           appStartedCompleter: onAppStart,
+          allowExistingDdsInstance: true,
         );
         if (result != 0) {
           throwToolExit(null, exitCode: result);
@@ -374,24 +391,23 @@ class AttachCommand extends FlutterCommand {
     assert(device != null);
     assert(flutterProject != null);
     assert(usesIpv6 != null);
+    final BuildInfo buildInfo = await getBuildInfo();
 
     final FlutterDevice flutterDevice = await FlutterDevice.create(
       device,
-      flutterProject: flutterProject,
       fileSystemRoots: stringsArg('filesystem-root'),
       fileSystemScheme: stringArg('filesystem-scheme'),
-      viewFilter: stringArg('isolate-filter'),
-      target: stringArg('target'),
+      target: targetFile,
       targetModel: TargetModel(stringArg('target-model')),
-      buildInfo: getBuildInfo(),
+      buildInfo: buildInfo,
       userIdentifier: userIdentifier,
-      widgetCache: WidgetCache(featureFlags: featureFlags),
+      platform: globals.platform,
     );
     flutterDevice.observatoryUris = observatoryUris;
     final List<FlutterDevice> flutterDevices =  <FlutterDevice>[flutterDevice];
-    final DebuggingOptions debuggingOptions = DebuggingOptions.enabled(getBuildInfo(), disableDds: boolArg('disable-dds'));
+    final DebuggingOptions debuggingOptions = DebuggingOptions.enabled(buildInfo, disableDds: boolArg('disable-dds'));
 
-    return getBuildInfo().isDebug
+    return buildInfo.isDebug
       ? hotRunnerFactory.build(
           flutterDevices,
           target: targetFile,

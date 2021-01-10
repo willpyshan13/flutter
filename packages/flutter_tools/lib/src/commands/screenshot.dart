@@ -2,8 +2,6 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import 'dart:async';
-
 import 'package:vm_service/vm_service.dart' as vm_service;
 
 import '../base/common.dart';
@@ -51,6 +49,7 @@ class ScreenshotCommand extends FlutterCommand {
       },
       defaultsTo: _kDeviceType,
     );
+    usesDeviceTimeoutOption();
   }
 
   @override
@@ -77,6 +76,9 @@ class ScreenshotCommand extends FlutterCommand {
       default:
         if (observatoryUri == null) {
           throwToolExit('Observatory URI must be specified for screenshot type $screenshotType');
+        }
+        if (observatoryUri.isEmpty || Uri.tryParse(observatoryUri) == null) {
+          throwToolExit('Observatory URI "$observatoryUri" is invalid');
         }
     }
   }

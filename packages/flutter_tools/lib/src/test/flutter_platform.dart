@@ -3,16 +3,13 @@
 // found in the LICENSE file.
 
 import 'dart:async';
+import 'dart:io' as io; // ignore: dart_io_import;
 
 import 'package:dds/dds.dart';
 import 'package:meta/meta.dart';
 import 'package:package_config/package_config.dart';
 import 'package:stream_channel/stream_channel.dart';
-import 'package:test_api/src/backend/suite_platform.dart'; // ignore: implementation_imports
-import 'package:test_core/src/runner/environment.dart'; // ignore: implementation_imports
-import 'package:test_core/src/runner/plugin/platform_helpers.dart'; // ignore: implementation_imports
-import 'package:test_core/src/runner/runner_suite.dart'; // ignore: implementation_imports
-import 'package:test_core/src/runner/suite.dart'; // ignore: implementation_imports
+import 'package:test_core/src/platform.dart'; // ignore: implementation_imports
 import 'package:vm_service/vm_service.dart' as vm_service;
 
 import '../base/common.dart';
@@ -22,7 +19,6 @@ import '../build_info.dart';
 import '../compile.dart';
 import '../convert.dart';
 import '../dart/language_version.dart';
-import '../dart/package_map.dart';
 import '../globals.dart' as globals;
 import '../project.dart';
 import '../test/test_wrapper.dart';
@@ -30,30 +26,6 @@ import '../vmservice.dart';
 import 'test_compiler.dart';
 import 'test_config.dart';
 import 'watcher.dart';
-
-/// The timeout we give the test process to connect to the test harness
-/// once the process has entered its main method.
-///
-/// We time out test execution because we expect some tests to hang and we want
-/// to know which test hung, rather than have the entire test harness just do
-/// nothing for a few hours until the user (or CI environment) gets bored.
-const Duration _kTestStartupTimeout = Duration(minutes: 5);
-
-/// The timeout we give the test process to start executing Dart code. When the
-/// CPU is under severe load, this can take a while, but it's not indicative of
-/// any problem with Flutter, so we give it a large timeout.
-///
-/// See comment under [_kTestStartupTimeout] regarding timeouts.
-const Duration _kTestProcessTimeout = Duration(minutes: 5);
-
-/// Message logged by the test process to signal that its main method has begun
-/// execution.
-///
-/// The test harness responds by starting the [_kTestStartupTimeout] countdown.
-/// The CPU may be throttled, which can cause a long delay in between when the
-/// process is spawned and when dart code execution begins; we don't want to
-/// hold that against the test.
-const String _kStartTimeoutTimerMessage = 'sky_shell test process has entered main method';
 
 /// The address at which our WebSocket server resides and at which the sky_shell
 /// processes will host the Observatory server.
@@ -77,11 +49,10 @@ FlutterPlatform installHook({
   bool machine = false,
   bool startPaused = false,
   bool disableServiceAuthCodes = false,
+  bool disableDds = false,
   int port = 0,
   String precompiledDillPath,
   Map<String, String> precompiledDillFiles,
-  @required BuildMode buildMode,
-  bool trackWidgetCreation = false,
   bool updateGoldens = false,
   bool buildTestAssets = false,
   int observatoryPort,
@@ -90,9 +61,9 @@ FlutterPlatform installHook({
   FlutterProject flutterProject,
   String icudtlPath,
   PlatformPluginRegistration platformPluginRegistration,
-  List<String> extraFrontEndOptions,
-  // Deprecated, use extraFrontEndOptions.
-  List<String> dartExperiments,
+  bool nullAssertions = false,
+  @required BuildInfo buildInfo,
+  List<String> additionalArguments,
 }) {
   assert(testWrapper != null);
   assert(enableObservatory || (!startPaused && observatoryPort == null));
@@ -113,19 +84,20 @@ FlutterPlatform installHook({
     enableObservatory: enableObservatory,
     startPaused: startPaused,
     disableServiceAuthCodes: disableServiceAuthCodes,
+    disableDds: disableDds,
     explicitObservatoryPort: observatoryPort,
     host: _kHosts[serverType],
     port: port,
     precompiledDillPath: precompiledDillPath,
     precompiledDillFiles: precompiledDillFiles,
-    buildMode: buildMode,
-    trackWidgetCreation: trackWidgetCreation,
     updateGoldens: updateGoldens,
     buildTestAssets: buildTestAssets,
     projectRootDirectory: projectRootDirectory,
     flutterProject: flutterProject,
     icudtlPath: icudtlPath,
-    extraFrontEndOptions: extraFrontEndOptions,
+    nullAssertions: nullAssertions,
+    buildInfo: buildInfo,
+    additionalArguments: additionalArguments,
   );
   platformPluginRegistration(platform);
   return platform;
@@ -155,6 +127,7 @@ String generateTestBootstrap({
   bool updateGoldens = false,
   String languageVersionHeader = '',
   bool nullSafety = false,
+  bool flutterTestDep = true,
 }) {
   assert(testUrl != null);
   assert(host != null);
@@ -172,8 +145,13 @@ import 'dart:async';
 import 'dart:convert';  // ignore: dart_convert_import
 import 'dart:io';  // ignore: dart_io_import
 import 'dart:isolate';
-
+''');
+  if (flutterTestDep) {
+    buffer.write('''
 import 'package:flutter_test/flutter_test.dart';
+''');
+  }
+  buffer.write('''
 import 'package:test_api/src/remote_listener.dart';
 import 'package:stream_channel/stream_channel.dart';
 import 'package:stack_trace/stack_trace.dart';
@@ -212,17 +190,20 @@ void catchIsolateErrors() {
 
 
 void main() {
-  print('$_kStartTimeoutTimerMessage');
   String serverPort = Platform.environment['SERVER_PORT'] ?? '';
   String server = Uri.decodeComponent('$encodedWebsocketUrl:\$serverPort');
   StreamChannel<dynamic> channel = serializeSuite(() {
     catchIsolateErrors();
-    goldenFileComparator = new LocalFileComparator(Uri.parse('$testUrl'));
-    autoUpdateGoldenFiles = $updateGoldens;
 ''');
+  if (flutterTestDep) {
+    buffer.write('''
+goldenFileComparator = LocalFileComparator(Uri.parse('$testUrl'));
+autoUpdateGoldenFiles = $updateGoldens;
+''');
+  }
   if (testConfigFile != null) {
     buffer.write('''
-    return () => test_config.main(test.main);
+    return () => test_config.testExecutable(test.main);
 ''');
   } else {
     buffer.write('''
@@ -242,7 +223,7 @@ void main() {
   return buffer.toString();
 }
 
-enum InitialResult { crashed, timedOut, connected }
+enum InitialResult { crashed, connected }
 
 enum TestResult { crashed, harnessBailed, testBailed }
 
@@ -257,19 +238,20 @@ class FlutterPlatform extends PlatformPlugin {
     this.machine,
     this.startPaused,
     this.disableServiceAuthCodes,
+    this.disableDds,
     this.explicitObservatoryPort,
     this.host,
     this.port,
     this.precompiledDillPath,
     this.precompiledDillFiles,
-    @required this.buildMode,
-    this.trackWidgetCreation,
     this.updateGoldens,
     this.buildTestAssets,
     this.projectRootDirectory,
     this.flutterProject,
     this.icudtlPath,
-    @required this.extraFrontEndOptions,
+    this.nullAssertions = false,
+    this.additionalArguments,
+    @required this.buildInfo,
   }) : assert(shellPath != null);
 
   final String shellPath;
@@ -278,19 +260,20 @@ class FlutterPlatform extends PlatformPlugin {
   final bool machine;
   final bool startPaused;
   final bool disableServiceAuthCodes;
+  final bool disableDds;
   final int explicitObservatoryPort;
   final InternetAddress host;
   final int port;
   final String precompiledDillPath;
   final Map<String, String> precompiledDillFiles;
-  final BuildMode buildMode;
-  final bool trackWidgetCreation;
   final bool updateGoldens;
   final bool buildTestAssets;
   final Uri projectRootDirectory;
   final FlutterProject flutterProject;
   final String icudtlPath;
-  final List<String> extraFrontEndOptions;
+  final bool nullAssertions;
+  final BuildInfo buildInfo;
+  final List<String> additionalArguments;
 
   Directory fontsDirectory;
 
@@ -320,23 +303,10 @@ class FlutterPlatform extends PlatformPlugin {
     // LoadSuite to emit an error, which will be presented to the user.
     // Except for the Declarer error, which is a specific test incompatibility
     // error we need to catch.
-    try {
-      final StreamChannel<dynamic> channel = loadChannel(path, platform);
-      final RunnerSuiteController controller = deserializeSuite(path, platform,
-        suiteConfig, const PluginEnvironment(), channel, message);
-      return await controller.suite;
-    } on Exception catch (err) {
-      /// Rethrow a less confusing error if it is a test incompatibility.
-      if (err.toString().contains("type 'Declarer' is not a subtype of type 'Declarer'")) {
-        throw UnsupportedError('Package incompatibility between flutter and test packages:\n'
-          '  * flutter is incompatible with test <1.4.0.\n'
-          '  * flutter is incompatible with mockito <4.0.0\n'
-          "To fix this error, update test to at least '^1.4.0' and mockito to at least '^4.0.0'\n"
-        );
-      }
-      // Guess it was a different error.
-      rethrow;
-    }
+    final StreamChannel<dynamic> channel = loadChannel(path, platform);
+    final RunnerSuiteController controller = deserializeSuite(path, platform,
+      suiteConfig, const PluginEnvironment(), channel, message);
+    return controller.suite;
   }
 
   @override
@@ -407,10 +377,7 @@ class FlutterPlatform extends PlatformPlugin {
     StreamChannel<dynamic> controller,
     int ourTestCount,
   ) async {
-    _packageConfig ??= await loadPackageConfigWithLogging(
-      globals.fs.file(globalPackagesPath),
-      logger: globals.logger,
-    );
+    _packageConfig ??= buildInfo.packageConfig;
     globals.printTrace('test $ourTestCount: starting test $testPath');
 
     _AsyncError outOfBandError; // error that we couldn't send to the harness that we need to send via our future
@@ -424,7 +391,7 @@ class FlutterPlatform extends PlatformPlugin {
         controllerSinkClosed = true;
       }));
 
-      // Prepare our WebSocket server to talk to the engine subproces.
+      // Prepare our WebSocket server to talk to the engine subprocess.
       final HttpServer server = await bind(host, port);
       finalizers.add(() async {
         globals.printTrace('test $ourTestCount: shutting down test harness socket server');
@@ -465,7 +432,7 @@ class FlutterPlatform extends PlatformPlugin {
 
       if (precompiledDillPath == null && precompiledDillFiles == null) {
         // Lazily instantiate compiler so it is built only if it is actually used.
-        compiler ??= TestCompiler(buildMode, trackWidgetCreation, flutterProject, extraFrontEndOptions);
+        compiler ??= TestCompiler(buildInfo, flutterProject);
         mainDart = await compiler.compile(globals.fs.file(mainDart).uri);
 
         if (mainDart == null) {
@@ -477,18 +444,19 @@ class FlutterPlatform extends PlatformPlugin {
       final Process process = await _startProcess(
         shellPath,
         mainDart,
-        packages: globalPackagesPath,
+        packages: buildInfo.packagesPath,
         enableObservatory: enableObservatory,
         startPaused: startPaused,
         disableServiceAuthCodes: disableServiceAuthCodes,
-        observatoryPort: explicitObservatoryPort,
+        observatoryPort: disableDds ? explicitObservatoryPort : 0,
         serverPort: server.port,
+        additionalArguments: additionalArguments,
       );
       subprocessActive = true;
       finalizers.add(() async {
         if (subprocessActive) {
           globals.printTrace('test $ourTestCount: ensuring end-of-process for shell');
-          process.kill();
+          process.kill(io.ProcessSignal.sigkill);
           final int exitCode = await process.exitCode;
           subprocessActive = false;
           if (!controllerSinkClosed && exitCode != -15) {
@@ -504,7 +472,6 @@ class FlutterPlatform extends PlatformPlugin {
         }
       });
 
-      final Completer<void> timeout = Completer<void>();
       final Completer<void> gotProcessObservatoryUri = Completer<void>();
       if (!enableObservatory) {
         gotProcessObservatoryUri.complete();
@@ -513,22 +480,25 @@ class FlutterPlatform extends PlatformPlugin {
       // Pipe stdout and stderr from the subprocess to our printStatus console.
       // We also keep track of what observatory port the engine used, if any.
       Uri processObservatoryUri;
+      final Uri ddsServiceUri = getDdsServiceUri();
       _pipeStandardStreamsToConsole(
         process,
         reportObservatoryUri: (Uri detectedUri) async {
           assert(processObservatoryUri == null);
           assert(explicitObservatoryPort == null ||
               explicitObservatoryPort == detectedUri.port);
-          if (startPaused && !machine) {
-            globals.printStatus('The test process has been started.');
-            globals.printStatus('You can now connect to it using observatory. To connect, load the following Web site in your browser:');
-            globals.printStatus('  $detectedUri');
-            globals.printStatus('You should first set appropriate breakpoints, then resume the test in the debugger.');
+          if (!disableDds) {
+            final DartDevelopmentService dds = await DartDevelopmentService.startDartDevelopmentService(
+              detectedUri,
+              serviceUri: ddsServiceUri,
+              enableAuthCodes: !disableServiceAuthCodes,
+              ipv6: host.type == InternetAddressType.IPv6,
+            );
+            processObservatoryUri = dds.uri;
+            globals.printTrace('Dart Development Service started at ${dds.uri}, forwarding to VM service at ${dds.remoteVmServiceUri}.');
           } else {
-            globals.printTrace('test $ourTestCount: using observatory uri $detectedUri from pid ${process.pid}');
+            processObservatoryUri = detectedUri;
           }
-          processObservatoryUri = detectedUri;
-          await DartDevelopmentService.startDartDevelopmentService(processObservatoryUri);
           {
             globals.printTrace('Connecting to service protocol: $processObservatoryUri');
             final Future<vm_service.VmService> localVmService = connectToVmService(processObservatoryUri,
@@ -537,13 +507,17 @@ class FlutterPlatform extends PlatformPlugin {
               globals.printTrace('Successfully connected to service protocol: $processObservatoryUri');
             }));
           }
+          if (startPaused && !machine) {
+            globals.printStatus('The test process has been started.');
+            globals.printStatus('You can now connect to it using observatory. To connect, load the following Web site in your browser:');
+            globals.printStatus('  $processObservatoryUri');
+            globals.printStatus('You should first set appropriate breakpoints, then resume the test in the debugger.');
+          } else {
+            globals.printTrace('test $ourTestCount: using observatory uri $processObservatoryUri from pid ${process.pid}');
+          }
           gotProcessObservatoryUri.complete();
           watcher?.handleStartedProcess(
               ProcessEvent(ourTestCount, process, processObservatoryUri));
-        },
-        startTimeoutTimer: () {
-          Future<InitialResult>.delayed(_kTestStartupTimeout)
-              .then<void>((_) => timeout.complete());
         },
       );
 
@@ -554,8 +528,6 @@ class FlutterPlatform extends PlatformPlugin {
       globals.printTrace('test $ourTestCount: awaiting initial result for pid ${process.pid}');
       final InitialResult initialResult = await Future.any<InitialResult>(<Future<InitialResult>>[
         process.exitCode.then<InitialResult>((int exitCode) => InitialResult.crashed),
-        timeout.future.then<InitialResult>((void value) => InitialResult.timedOut),
-        Future<InitialResult>.delayed(_kTestProcessTimeout, () => InitialResult.timedOut),
         gotProcessObservatoryUri.future.then<InitialResult>((void value) {
           return webSocket.future.then<InitialResult>(
             (WebSocket webSocket) => InitialResult.connected,
@@ -579,20 +551,6 @@ class FlutterPlatform extends PlatformPlugin {
           globals.printTrace('test $ourTestCount: waiting for controller sink to close');
           await controller.sink.done;
           await watcher?.handleTestCrashed(ProcessEvent(ourTestCount, process));
-          break;
-        case InitialResult.timedOut:
-          // Could happen either if the process takes a long time starting
-          // (_kTestProcessTimeout), or if once Dart code starts running, it takes a
-          // long time to open the WebSocket connection (_kTestStartupTimeout).
-          globals.printTrace('test $ourTestCount: timed out waiting for process with pid ${process.pid} to connect to test harness');
-          final String message = _getErrorMessage('Test never connected to test harness.', testPath, shellPath);
-          controller.sink.addError(message);
-          // Awaited for with 'sink.done' below.
-          unawaited(controller.sink.close());
-          globals.printTrace('test $ourTestCount: waiting for controller sink to close');
-          await controller.sink.done;
-          await watcher
-              ?.handleTestTimedOut(ProcessEvent(ourTestCount, process));
           break;
         case InitialResult.connected:
           globals.printTrace('test $ourTestCount: process with pid ${process.pid} connected to test harness');
@@ -754,18 +712,19 @@ class FlutterPlatform extends PlatformPlugin {
   }) {
     assert(testUrl.scheme == 'file');
     final File file = globals.fs.file(testUrl);
+    final LanguageVersion languageVersion = determineLanguageVersion(
+      file,
+      _packageConfig[flutterProject?.manifest?.appName],
+    );
     return generateTestBootstrap(
       testUrl: testUrl,
       testConfigFile: findTestConfigFile(globals.fs.file(testUrl)),
       host: host,
       updateGoldens: updateGoldens,
-      languageVersionHeader: determineLanguageVersion(
-        file,
-        _packageConfig[flutterProject?.manifest?.appName],
-      ),
+      flutterTestDep: _packageConfig['flutter_test'] != null,
+      languageVersionHeader: '// @dart=${languageVersion.major}.${languageVersion.minor}'
     );
   }
-
 
   File _cachedFontConfig;
 
@@ -815,6 +774,7 @@ class FlutterPlatform extends PlatformPlugin {
     bool disableServiceAuthCodes = false,
     int observatoryPort,
     int serverPort,
+    List<String> additionalArguments,
   }) {
     assert(executable != null); // Please provide the path to the shell in the SKY_SHELL environment variable.
     assert(!startPaused || enableObservatory);
@@ -846,6 +806,9 @@ class FlutterPlatform extends PlatformPlugin {
       '--non-interactive',
       '--use-test-fonts',
       '--packages=$packages',
+      if (nullAssertions)
+        '--dart-flags=--null_assertions',
+      ...?additionalArguments,
       testPath,
     ];
 
@@ -871,7 +834,6 @@ class FlutterPlatform extends PlatformPlugin {
 
   void _pipeStandardStreamsToConsole(
     Process process, {
-    void startTimeoutTimer(),
     Future<void> reportObservatoryUri(Uri uri),
   }) {
 
@@ -885,11 +847,7 @@ class FlutterPlatform extends PlatformPlugin {
           .transform<String>(const LineSplitter())
           .listen(
         (String line) async {
-          if (line == _kStartTimeoutTimerMessage) {
-            if (startTimeoutTimer != null) {
-              startTimeoutTimer();
-            }
-          } else if (line.startsWith("error: Unable to read Dart source 'package:test/")) {
+          if (line.startsWith("error: Unable to read Dart source 'package:test/")) {
             globals.printTrace('Shell: $line');
             globals.printError('\n\nFailed to load test harness. Are you missing a dependency on flutter_test?\n');
           } else if (line.startsWith(observatoryString)) {
@@ -935,6 +893,19 @@ class FlutterPlatform extends PlatformPlugin {
       default:
         return 'Shell subprocess crashed with unexpected exit code $exitCode $when.';
     }
+  }
+
+  @visibleForTesting
+  @protected
+  Uri getDdsServiceUri() {
+    return Uri(
+      scheme: 'http',
+      host: (host.type == InternetAddressType.IPv6 ?
+        InternetAddress.loopbackIPv6 :
+        InternetAddress.loopbackIPv4
+      ).host,
+      port: explicitObservatoryPort ?? 0,
+    );
   }
 }
 

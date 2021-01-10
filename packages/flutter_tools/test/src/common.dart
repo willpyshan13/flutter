@@ -7,8 +7,13 @@ import 'dart:async';
 import 'package:args/args.dart';
 import 'package:args/command_runner.dart';
 import 'package:flutter_tools/src/base/logger.dart';
+import 'package:flutter_tools/src/base/platform.dart';
+import 'package:flutter_tools/src/base/user_messages.dart';
+import 'package:flutter_tools/src/cache.dart';
 import 'package:flutter_tools/src/convert.dart';
+import 'package:flutter_tools/src/doctor.dart';
 import 'package:vm_service/vm_service.dart' as vm_service;
+import 'package:path/path.dart' as path; // ignore: package_path_import
 
 import 'package:flutter_tools/src/base/common.dart';
 import 'package:flutter_tools/src/base/context.dart';
@@ -19,7 +24,7 @@ import 'package:flutter_tools/src/runner/flutter_command.dart';
 import 'package:flutter_tools/src/runner/flutter_command_runner.dart';
 import 'package:flutter_tools/src/globals.dart' as globals;
 import 'package:meta/meta.dart';
-import 'package:quiver/testing/async.dart';
+import 'package:fake_async/fake_async.dart';
 import 'package:test_api/test_api.dart' as test_package show TypeMatcher, test; // ignore: deprecated_member_use
 import 'package:test_api/test_api.dart' hide TypeMatcher, isInstanceOf; // ignore: deprecated_member_use
 // ignore: deprecated_member_use
@@ -48,20 +53,21 @@ void tryToDelete(Directory directory) {
 /// environment variable is set, it will be returned. Otherwise, this will
 /// deduce the path from `platform.script`.
 String getFlutterRoot() {
-  if (globals.platform.environment.containsKey('FLUTTER_ROOT')) {
-    return globals.platform.environment['FLUTTER_ROOT'];
+  const Platform platform = LocalPlatform();
+  if (platform.environment.containsKey('FLUTTER_ROOT')) {
+    return platform.environment['FLUTTER_ROOT'];
   }
 
   Error invalidScript() => StateError('Could not determine flutter_tools/ path from script URL (${globals.platform.script}); consider setting FLUTTER_ROOT explicitly.');
 
   Uri scriptUri;
-  switch (globals.platform.script.scheme) {
+  switch (platform.script.scheme) {
     case 'file':
-      scriptUri = globals.platform.script;
+      scriptUri = platform.script;
       break;
     case 'data':
       final RegExp flutterTools = RegExp(r'(file://[^"]*[/\\]flutter_tools[/\\][^"]+\.dart)', multiLine: true);
-      final Match match = flutterTools.firstMatch(Uri.decodeFull(globals.platform.script.path));
+      final Match match = flutterTools.firstMatch(Uri.decodeFull(platform.script.path));
       if (match == null) {
         throw invalidScript();
       }
@@ -71,13 +77,13 @@ String getFlutterRoot() {
       throw invalidScript();
   }
 
-  final List<String> parts = globals.fs.path.split(globals.fs.path.fromUri(scriptUri));
+  final List<String> parts = path.split(LocalFileSystem.instance.path.fromUri(scriptUri));
   final int toolsIndex = parts.indexOf('flutter_tools');
   if (toolsIndex == -1) {
     throw invalidScript();
   }
-  final String toolsPath = globals.fs.path.joinAll(parts.sublist(0, toolsIndex + 1));
-  return globals.fs.path.normalize(globals.fs.path.join(toolsPath, '..', '..'));
+  final String toolsPath = path.joinAll(parts.sublist(0, toolsIndex + 1));
+  return path.normalize(path.join(toolsPath, '..', '..'));
 }
 
 CommandRunner<void> createTestCommandRunner([ FlutterCommand command ]) {
@@ -86,6 +92,18 @@ CommandRunner<void> createTestCommandRunner([ FlutterCommand command ]) {
     runner.addCommand(command);
   }
   return runner;
+}
+
+/// Capture console print events into a string buffer.
+Future<StringBuffer> capturedConsolePrint(Future<void> Function() body) async {
+  final StringBuffer buffer = StringBuffer();
+  await runZoned<Future<void>>(() async {
+    // Service the event loop.
+    await body();
+  }, zoneSpecification: ZoneSpecification(print: (Zone self, ZoneDelegate parent, Zone zone, String line) {
+    buffer.writeln(line);
+  }));
+  return buffer;
 }
 
 /// Matcher for functions that throw [AssertionError].
@@ -226,7 +244,7 @@ Future<T> runFakeAsync<T>(Future<T> Function(FakeAsync time) f) async {
       time.flushMicrotasks();
     }
     return future;
-  }) as Future<T>;
+  });
 }
 
 /// An implementation of [AppContext] that throws if context.get is called in the test.
@@ -385,7 +403,49 @@ class TestFlutterCommandRunner extends FlutterCommandRunner {
       overrides: contextOverrides.map<Type, Generator>((Type type, dynamic value) {
         return MapEntry<Type, Generator>(type, () => value);
       }),
-      body: () => super.runCommand(topLevelResults),
+      body: () {
+        Cache.flutterRoot ??= Cache.defaultFlutterRoot(
+          platform: globals.platform,
+          fileSystem: globals.fs,
+          userMessages: UserMessages(),
+        );
+        // For compatibility with tests that set this to a relative path.
+        Cache.flutterRoot = globals.fs.path.normalize(globals.fs.path.absolute(Cache.flutterRoot));
+        return super.runCommand(topLevelResults);
+      }
     );
   }
+}
+
+/// A file system that allows preconfiguring certain entities.
+///
+/// This is useful for inserting mocks/entities which throw errors or
+/// have other behavior that is not easily configured through the
+/// filesystem interface.
+class ConfiguredFileSystem extends ForwardingFileSystem {
+  ConfiguredFileSystem(FileSystem delegate, {@required this.entities}) : super(delegate);
+
+  final Map<String, FileSystemEntity> entities;
+
+  @override
+  File file(dynamic path) {
+    return (entities[path] as File) ?? super.file(path);
+  }
+
+  @override
+  Directory directory(dynamic path) {
+    return (entities[path] as Directory) ?? super.directory(path);
+  }
+}
+
+/// Matches a doctor validation result.
+Matcher matchDoctorValidation({
+  ValidationType validationType,
+  String statusInfo,
+  dynamic messages
+}) {
+  return const test_package.TypeMatcher<ValidationResult>()
+    .having((ValidationResult result) => result.type, 'type', validationType)
+    .having((ValidationResult result) => result.statusInfo, 'statusInfo', statusInfo)
+    .having((ValidationResult result) => result.messages, 'messages', messages);
 }

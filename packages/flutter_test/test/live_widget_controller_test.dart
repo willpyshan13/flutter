@@ -18,7 +18,7 @@ class _CountButtonState extends State<CountButton> {
   int counter = 0;
   @override
   Widget build(BuildContext context) {
-    return RaisedButton(
+    return ElevatedButton(
       child: Text('Counter $counter'),
       onPressed: () {
         setState(() {
@@ -29,19 +29,62 @@ class _CountButtonState extends State<CountButton> {
   }
 }
 
+class AnimateSample extends StatefulWidget {
+  @override
+  _AnimateSampleState createState() => _AnimateSampleState();
+}
+
+class _AnimateSampleState extends State<AnimateSample>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(seconds: 1),
+    )..forward();
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: _controller,
+      builder: (BuildContext context, _) => Text('Value: ${_controller.value}'),
+    );
+  }
+}
+
 void main() {
   test('Test pump on LiveWidgetController', () async {
     runApp(MaterialApp(home: Center(child: CountButton())));
 
-    await SchedulerBinding.instance.endOfFrame;
+    await SchedulerBinding.instance!.endOfFrame;
     final WidgetController controller =
-        LiveWidgetController(WidgetsBinding.instance);
+        LiveWidgetController(WidgetsBinding.instance!);
     await controller.tap(find.text('Counter 0'));
     expect(find.text('Counter 0'), findsOneWidget);
     expect(find.text('Counter 1'), findsNothing);
     await controller.pump();
     expect(find.text('Counter 0'), findsNothing);
     expect(find.text('Counter 1'), findsOneWidget);
+  });
+
+  test('Test pumpAndSettle on LiveWidgetController', () async {
+    runApp(MaterialApp(home: Center(child: AnimateSample())));
+    await SchedulerBinding.instance!.endOfFrame;
+    final WidgetController controller =
+        LiveWidgetController(WidgetsBinding.instance!);
+    expect(find.text('Value: 1.0'), findsNothing);
+    await controller.pumpAndSettle();
+    expect(find.text('Value: 1.0'), findsOneWidget);
   });
 
   test('Input event array on LiveWidgetController', () async {
@@ -56,9 +99,9 @@ void main() {
         ),
       ),
     );
-    await SchedulerBinding.instance.endOfFrame;
+    await SchedulerBinding.instance!.endOfFrame;
     final WidgetController controller =
-        LiveWidgetController(WidgetsBinding.instance);
+        LiveWidgetController(WidgetsBinding.instance!);
 
     final Offset location = controller.getCenter(find.text('test'));
     final List<PointerEventRecord> records = <PointerEventRecord>[

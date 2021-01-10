@@ -2,8 +2,6 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import 'dart:async';
-
 import 'package:file/memory.dart';
 import 'package:flutter_tools/src/base/file_system.dart';
 import 'package:flutter_tools/src/base/platform.dart';
@@ -39,6 +37,8 @@ final vm_service.Isolate fakeUnpausedIsolate = vm_service.Isolate(
   pauseOnExit: false,
   runnable: true,
   startTime: 0,
+  isSystemIsolate: false,
+  isolateFlags: <vm_service.IsolateFlag>[],
 );
 
 final FlutterView fakeFlutterView = FlutterView(
@@ -57,21 +57,20 @@ final FakeVmServiceRequest listViews = FakeVmServiceRequest(
 void main() {
   group('validateReloadReport', () {
     testUsingContext('invalid', () async {
-      expect(HotRunner.validateReloadReport(<String, dynamic>{}), false);
-      expect(HotRunner.validateReloadReport(<String, dynamic>{
+      expect(HotRunner.validateReloadReport(vm_service.ReloadReport.parse(<String, dynamic>{
         'type': 'ReloadReport',
         'success': false,
         'details': <String, dynamic>{},
-      }), false);
-      expect(HotRunner.validateReloadReport(<String, dynamic>{
+      })), false);
+      expect(HotRunner.validateReloadReport(vm_service.ReloadReport.parse(<String, dynamic>{
         'type': 'ReloadReport',
         'success': false,
         'details': <String, dynamic>{
           'notices': <Map<String, dynamic>>[
           ],
         },
-      }), false);
-      expect(HotRunner.validateReloadReport(<String, dynamic>{
+      })), false);
+      expect(HotRunner.validateReloadReport(vm_service.ReloadReport.parse(<String, dynamic>{
         'type': 'ReloadReport',
         'success': false,
         'details': <String, dynamic>{
@@ -79,15 +78,15 @@ void main() {
             'message': 'error',
           },
         },
-      }), false);
-      expect(HotRunner.validateReloadReport(<String, dynamic>{
+      })), false);
+      expect(HotRunner.validateReloadReport(vm_service.ReloadReport.parse(<String, dynamic>{
         'type': 'ReloadReport',
         'success': false,
         'details': <String, dynamic>{
           'notices': <Map<String, dynamic>>[],
         },
-      }), false);
-      expect(HotRunner.validateReloadReport(<String, dynamic>{
+      })), false);
+      expect(HotRunner.validateReloadReport(vm_service.ReloadReport.parse(<String, dynamic>{
         'type': 'ReloadReport',
         'success': false,
         'details': <String, dynamic>{
@@ -95,8 +94,8 @@ void main() {
             <String, dynamic>{'message': false},
           ],
         },
-      }), false);
-      expect(HotRunner.validateReloadReport(<String, dynamic>{
+      })), false);
+      expect(HotRunner.validateReloadReport(vm_service.ReloadReport.parse(<String, dynamic>{
         'type': 'ReloadReport',
         'success': false,
         'details': <String, dynamic>{
@@ -104,8 +103,8 @@ void main() {
             <String, dynamic>{'message': <String>['error']},
           ],
         },
-      }), false);
-      expect(HotRunner.validateReloadReport(<String, dynamic>{
+      })), false);
+      expect(HotRunner.validateReloadReport(vm_service.ReloadReport.parse(<String, dynamic>{
         'type': 'ReloadReport',
         'success': false,
         'details': <String, dynamic>{
@@ -114,8 +113,8 @@ void main() {
             <String, dynamic>{'message': <String>['error']},
           ],
         },
-      }), false);
-      expect(HotRunner.validateReloadReport(<String, dynamic>{
+      })), false);
+      expect(HotRunner.validateReloadReport(vm_service.ReloadReport.parse(<String, dynamic>{
         'type': 'ReloadReport',
         'success': false,
         'details': <String, dynamic>{
@@ -123,11 +122,19 @@ void main() {
             <String, dynamic>{'message': 'error'},
           ],
         },
-      }), false);
-      expect(HotRunner.validateReloadReport(<String, dynamic>{
+      })), false);
+      expect(HotRunner.validateReloadReport(vm_service.ReloadReport.parse(<String, dynamic>{
         'type': 'ReloadReport',
         'success': true,
-      }), true);
+      })), true);
+    });
+
+    testWithoutContext('ReasonForCancelling toString has a hint for specific errors', () {
+      final ReasonForCancelling reasonForCancelling = ReasonForCancelling(
+        message: 'Const class cannot remove fields',
+      );
+
+      expect(reasonForCancelling.toString(), contains('Try performing a hot restart instead.'));
     });
   });
 
@@ -177,6 +184,7 @@ void main() {
       final OperationResult result = await HotRunner(
         devices,
         debuggingOptions: DebuggingOptions.disabled(BuildInfo.debug),
+        target: 'main.dart',
       ).restart(fullRestart: true);
       // Expect hot restart failed.
       expect(result.isOk, false);
@@ -207,7 +215,8 @@ void main() {
       ];
       final OperationResult result = await HotRunner(
         devices,
-        debuggingOptions: DebuggingOptions.disabled(BuildInfo.debug)
+        debuggingOptions: DebuggingOptions.disabled(BuildInfo.debug),
+        target: 'main.dart',
       ).restart(fullRestart: true);
       // Expect hot restart failed.
       expect(result.isOk, false);
@@ -278,7 +287,7 @@ void main() {
           method: kRunInViewMethod,
           args: <String, Object>{
             'viewId': fakeFlutterView.id,
-            'mainScript': 'lib/main.dart.dill',
+            'mainScript': 'main.dart.dill',
             'assetDirectory': 'build/flutter_assets',
           }
         ),
@@ -286,7 +295,7 @@ void main() {
           method: kRunInViewMethod,
           args: <String, Object>{
             'viewId': fakeFlutterView.id,
-            'mainScript': 'lib/main.dart.dill',
+            'mainScript': 'main.dart.dill',
             'assetDirectory': 'build/flutter_assets',
           }
         ),
@@ -310,6 +319,7 @@ void main() {
       final HotRunner hotRunner = HotRunner(
         devices,
         debuggingOptions: DebuggingOptions.disabled(BuildInfo.debug),
+        target: 'main.dart',
       );
       final OperationResult result = await hotRunner.restart(fullRestart: true);
       // Expect hot restart was successful.
@@ -333,11 +343,12 @@ void main() {
       when(mockDevice.supportsHotRestart).thenReturn(true);
       when(mockDevice.targetPlatform).thenAnswer((Invocation _) async => TargetPlatform.tester);
       final List<FlutterDevice> devices = <FlutterDevice>[
-        FlutterDevice(mockDevice, generator: residentCompiler, buildInfo: BuildInfo.debug),
+        FlutterDevice(mockDevice, generator: residentCompiler, buildInfo: BuildInfo.debug)..devFS = MockDevFs(),
       ];
       final OperationResult result = await HotRunner(
         devices,
         debuggingOptions: DebuggingOptions.disabled(BuildInfo.debug),
+        target: 'main.dart',
       ).restart(fullRestart: true);
       expect(result.isOk, false);
       expect(result.message, 'setupHotRestart failed');
@@ -378,7 +389,7 @@ void main() {
           method: kRunInViewMethod,
           args: <String, Object>{
             'viewId': fakeFlutterView.id,
-            'mainScript': 'lib/main.dart.dill',
+            'mainScript': 'main.dart.dill',
             'assetDirectory': 'build/flutter_assets',
           }
         ),
@@ -403,6 +414,7 @@ void main() {
       final HotRunner hotRunner = HotRunner(
         devices,
         debuggingOptions: DebuggingOptions.disabled(BuildInfo.debug),
+        target: 'main.dart',
       );
       final OperationResult result = await hotRunner.restart(fullRestart: true);
       // Expect hot restart successful.
@@ -439,7 +451,8 @@ void main() {
         ];
         await HotRunner(
           devices,
-          debuggingOptions: DebuggingOptions.disabled(BuildInfo.debug)
+          debuggingOptions: DebuggingOptions.disabled(BuildInfo.debug),
+          target: 'main.dart',
         ).cleanupAfterSignal();
         expect(shutdownTestingConfig.shutdownHookCalled, true);
       }, overrides: <Type, Generator>{
@@ -463,7 +476,8 @@ void main() {
         ];
         await HotRunner(
           devices,
-          debuggingOptions: DebuggingOptions.disabled(BuildInfo.debug)
+          debuggingOptions: DebuggingOptions.disabled(BuildInfo.debug),
+          target: 'main.dart',
         ).preExit();
         expect(shutdownTestingConfig.shutdownHookCalled, true);
       }, overrides: <Type, Generator>{
@@ -507,6 +521,7 @@ void main() {
 
       final int exitCode = await HotRunner(devices,
         debuggingOptions: DebuggingOptions.enabled(BuildInfo.debug),
+        target: 'main.dart',
       ).attach();
       expect(exitCode, 2);
     }, overrides: <Type, Generator>{
@@ -539,6 +554,7 @@ void main() {
 
       await HotRunner(devices,
         debuggingOptions: DebuggingOptions.enabled(BuildInfo.debug),
+        target: 'main.dart',
       ).cleanupAtFinish();
 
       verify(mockDevice1.dispose());
@@ -575,11 +591,14 @@ class TestFlutterDevice extends FlutterDevice {
     ReloadSources reloadSources,
     Restart restart,
     CompileExpression compileExpression,
-    ReloadMethod reloadMethod,
     GetSkSLMethod getSkSLMethod,
     PrintStructuredErrorLogMethod printStructuredErrorLogMethod,
+    bool disableServiceAuthCodes = false,
     bool disableDds = false,
     bool ipv6 = false,
+    int hostVmServicePort,
+    int ddsPort,
+    bool allowExistingDdsInstance = false,
   }) async {
     throw exception;
   }

@@ -2,8 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import 'dart:async';
-
+import 'package:archive/archive.dart';
 import 'package:file/memory.dart';
 import 'package:flutter_tools/src/android/android_sdk.dart';
 import 'package:flutter_tools/src/android/android_studio.dart';
@@ -30,7 +29,6 @@ import 'package:process/process.dart';
 import '../../src/common.dart';
 import '../../src/context.dart';
 import '../../src/mocks.dart';
-import '../../src/pubspec_schema.dart';
 
 void main() {
   Cache.flutterRoot = getFlutterRoot();
@@ -153,11 +151,25 @@ void main() {
       expect(bundle.path, fileSystem.path.join('irrelevant', 'app', 'outputs', 'bundle', 'foo_barRelease', 'app.aab'));
     });
 
+    testWithoutContext('Finds app bundle when flavor contains underscores and uppercase letters in release mode', () {
+      final FlutterProject project = generateFakeAppBundle('foo_barRelease', 'app.aab', fileSystem);
+      final File bundle = findBundleFile(project, const BuildInfo(BuildMode.release, 'foo_Bar', treeShakeIcons: false));
+      expect(bundle, isNotNull);
+      expect(bundle.path, fileSystem.path.join('irrelevant', 'app', 'outputs', 'bundle', 'foo_barRelease', 'app.aab'));
+    });
+
     testWithoutContext("Finds app bundle when flavor doesn't contain underscores in release mode", () {
       final FlutterProject project = generateFakeAppBundle('fooRelease', 'app.aab', fileSystem);
       final File bundle = findBundleFile(project, const BuildInfo(BuildMode.release, 'foo', treeShakeIcons: false));
       expect(bundle, isNotNull);
       expect(bundle.path, fileSystem.path.join('irrelevant', 'app', 'outputs', 'bundle', 'fooRelease', 'app.aab'));
+    });
+
+    testWithoutContext("Finds app bundle when flavor doesn't contain underscores but contains uppercase letters in release mode", () {
+      final FlutterProject project = generateFakeAppBundle('fooaRelease', 'app.aab', fileSystem);
+      final File bundle = findBundleFile(project, const BuildInfo(BuildMode.release, 'fooA', treeShakeIcons: false));
+      expect(bundle, isNotNull);
+      expect(bundle.path, fileSystem.path.join('irrelevant', 'app', 'outputs', 'bundle', 'fooaRelease', 'app.aab'));
     });
 
     testWithoutContext('Finds app bundle when no flavor is used in release mode', () {
@@ -174,11 +186,25 @@ void main() {
       expect(bundle.path, fileSystem.path.join('irrelevant', 'app', 'outputs', 'bundle', 'foo_barDebug', 'app.aab'));
     });
 
+    testWithoutContext('Finds app bundle when flavor contains underscores and uppercase letters in debug mode', () {
+      final FlutterProject project = generateFakeAppBundle('foo_barDebug', 'app.aab', fileSystem);
+      final File bundle = findBundleFile(project, const BuildInfo(BuildMode.debug, 'foo_Bar', treeShakeIcons: false));
+      expect(bundle, isNotNull);
+      expect(bundle.path, fileSystem.path.join('irrelevant', 'app', 'outputs', 'bundle', 'foo_barDebug', 'app.aab'));
+    });
+
     testWithoutContext("Finds app bundle when flavor doesn't contain underscores in debug mode", () {
       final FlutterProject project = generateFakeAppBundle('fooDebug', 'app.aab', fileSystem);
       final File bundle = findBundleFile(project, const BuildInfo(BuildMode.debug, 'foo', treeShakeIcons: false));
       expect(bundle, isNotNull);
       expect(bundle.path, fileSystem.path.join('irrelevant', 'app', 'outputs', 'bundle', 'fooDebug', 'app.aab'));
+    });
+
+    testWithoutContext("Finds app bundle when flavor doesn't contain underscores but contains uppercase letters in debug mode", () {
+      final FlutterProject project = generateFakeAppBundle('fooaDebug', 'app.aab', fileSystem);
+      final File bundle = findBundleFile(project, const BuildInfo(BuildMode.debug, 'fooA', treeShakeIcons: false));
+      expect(bundle, isNotNull);
+      expect(bundle.path, fileSystem.path.join('irrelevant', 'app', 'outputs', 'bundle', 'fooaDebug', 'app.aab'));
     });
 
     testWithoutContext('Finds app bundle when no flavor is used in debug mode', () {
@@ -195,11 +221,25 @@ void main() {
       expect(bundle.path, fileSystem.path.join('irrelevant', 'app', 'outputs', 'bundle', 'foo_barProfile', 'app.aab'));
     });
 
+    testWithoutContext('Finds app bundle when flavor contains underscores and uppercase letters in profile mode', () {
+      final FlutterProject project = generateFakeAppBundle('foo_barProfile', 'app.aab', fileSystem);
+      final File bundle = findBundleFile(project, const BuildInfo(BuildMode.profile, 'foo_Bar', treeShakeIcons: false));
+      expect(bundle, isNotNull);
+      expect(bundle.path, fileSystem.path.join('irrelevant', 'app', 'outputs', 'bundle', 'foo_barProfile', 'app.aab'));
+    });
+
     testWithoutContext("Finds app bundle when flavor doesn't contain underscores in profile mode", () {
       final FlutterProject project = generateFakeAppBundle('fooProfile', 'app.aab', fileSystem);
       final File bundle = findBundleFile(project, const BuildInfo(BuildMode.profile, 'foo', treeShakeIcons: false));
       expect(bundle, isNotNull);
       expect(bundle.path, fileSystem.path.join('irrelevant', 'app', 'outputs', 'bundle', 'fooProfile', 'app.aab'));
+    });
+
+    testWithoutContext("Finds app bundle when flavor doesn't contain underscores but contains uppercase letters in profile mode", () {
+      final FlutterProject project = generateFakeAppBundle('fooaProfile', 'app.aab', fileSystem);
+      final File bundle = findBundleFile(project, const BuildInfo(BuildMode.profile, 'fooA', treeShakeIcons: false));
+      expect(bundle, isNotNull);
+      expect(bundle.path, fileSystem.path.join('irrelevant', 'app', 'outputs', 'bundle', 'fooaProfile', 'app.aab'));
     });
 
     testWithoutContext('Finds app bundle when no flavor is used in profile mode', () {
@@ -237,6 +277,13 @@ void main() {
       expect(bundle.path, fileSystem.path.join('irrelevant', 'app', 'outputs', 'bundle', 'foo_barRelease', 'app-foo_bar-release.aab'));
     });
 
+    testWithoutContext('Finds app bundle when flavor contains underscores and uppercase letters in release mode - Gradle 3.5', () {
+      final FlutterProject project = generateFakeAppBundle('foo_barRelease', 'app-foo_bar-release.aab', fileSystem);
+      final File bundle = findBundleFile(project, const BuildInfo(BuildMode.release, 'foo_Bar', treeShakeIcons: false));
+      expect(bundle, isNotNull);
+      expect(bundle.path, fileSystem.path.join('irrelevant', 'app', 'outputs', 'bundle', 'foo_barRelease', 'app-foo_bar-release.aab'));
+    });
+
     testWithoutContext('Finds app bundle when flavor contains underscores in profile mode - Gradle 3.5', () {
       final FlutterProject project = generateFakeAppBundle('foo_barProfile', 'app-foo_bar-profile.aab', fileSystem);
       final File bundle = findBundleFile(project, const BuildInfo(BuildMode.profile, 'foo_bar', treeShakeIcons: false));
@@ -244,9 +291,9 @@ void main() {
       expect(bundle.path, fileSystem.path.join('irrelevant', 'app', 'outputs', 'bundle', 'foo_barProfile', 'app-foo_bar-profile.aab'));
     });
 
-    testWithoutContext('Finds app bundle when flavor contains underscores in debug mode - Gradle 3.5', () {
+    testWithoutContext('Finds app bundle when flavor contains underscores and uppercase letters in debug mode - Gradle 3.5', () {
       final FlutterProject project = generateFakeAppBundle('foo_barDebug', 'app-foo_bar-debug.aab', fileSystem);
-      final File bundle = findBundleFile(project, const BuildInfo(BuildMode.debug, 'foo_bar', treeShakeIcons: false));
+      final File bundle = findBundleFile(project, const BuildInfo(BuildMode.debug, 'foo_Bar', treeShakeIcons: false));
       expect(bundle, isNotNull);
       expect(bundle.path, fileSystem.path.join('irrelevant','app', 'outputs', 'bundle', 'foo_barDebug', 'app-foo_bar-debug.aab'));
     });
@@ -269,12 +316,12 @@ void main() {
           any,
           label: 'gradle-expected-file-not-found',
           parameters: const <String, String> {
-            'cd37': 'androidGradlePluginVersion: 5.6.2, fileExtension: .aab',
+            'cd37': 'androidGradlePluginVersion: 6.7, fileExtension: .aab',
           },
         ),
       ).called(1);
     }, overrides: <Type, Generator>{
-      FileSystem: () => MemoryFileSystem(),
+      FileSystem: () => MemoryFileSystem.test(),
       ProcessManager: () => FakeProcessManager.any(),
       Usage: () => mockUsage,
     });
@@ -297,6 +344,14 @@ void main() {
       expect(apks, <String>['app-flavor1-release.apk']);
     });
 
+    testWithoutContext('Finds APK with flavor in release mode', () {
+      final Iterable<String> apks = listApkPaths(
+        const AndroidBuildInfo(BuildInfo(BuildMode.release, 'flavorA', treeShakeIcons: false)),
+      );
+
+      expect(apks, <String>['app-flavora-release.apk']);
+    });
+
     testWithoutContext('Finds APK with flavor in release mode - AGP v3', () {
       final Iterable<String> apks = listApkPaths(
         const AndroidBuildInfo(BuildInfo(BuildMode.release, 'flavor1', treeShakeIcons: false)),
@@ -316,6 +371,19 @@ void main() {
         'app-x86_64-flavor1-release.apk',
       ]));
     });
+
+    testWithoutContext('Finds APK with split-per-abi when flavor contains uppercase letters', () {
+      final Iterable<String> apks = listApkPaths(
+        const AndroidBuildInfo(BuildInfo(BuildMode.release, 'flavorA', treeShakeIcons: false), splitPerAbi: true),
+      );
+
+      expect(apks, unorderedEquals(<String>[
+        'app-armeabi-v7a-flavora-release.apk',
+        'app-arm64-v8a-flavora-release.apk',
+        'app-x86_64-flavora-release.apk',
+      ]));
+    });
+
   });
 
   group('gradle build', () {
@@ -403,7 +471,7 @@ include ':app'
       expect(tempDir.childFile('settings_aar.gradle').existsSync(), isTrue);
 
     }, overrides: <Type, Generator>{
-      FileSystem: () => MemoryFileSystem(),
+      FileSystem: () => MemoryFileSystem.test(),
       ProcessManager: () => FakeProcessManager.any(),
     });
 
@@ -436,7 +504,7 @@ include ':app'
       expect(tempDir.childFile('settings_aar.gradle').existsSync(), isTrue);
 
     }, overrides: <Type, Generator>{
-      FileSystem: () => MemoryFileSystem(),
+      FileSystem: () => MemoryFileSystem.test(),
       ProcessManager: () => FakeProcessManager.any(),
     });
   });
@@ -448,7 +516,7 @@ include ':app'
     FileSystem fs;
 
     setUp(() {
-      fs = MemoryFileSystem();
+      fs = MemoryFileSystem.test();
       mockArtifacts = MockLocalEngineArtifacts();
       mockProcessManager = MockProcessManager();
       android = fakePlatform('android');
@@ -476,16 +544,18 @@ include ':app'
       String expectedBuildName,
       String expectedBuildNumber,
     }) async {
-      when(mockArtifacts.getArtifactPath(Artifact.flutterFramework,
-          platform: TargetPlatform.android_arm, mode: anyNamed('mode'))).thenReturn('engine');
+      when(mockArtifacts.getArtifactPath(
+        Artifact.flutterFramework,
+        platform: TargetPlatform.android_arm,
+        mode: anyNamed('mode'),
+        environmentType: anyNamed('environmentType'),
+      )).thenReturn('engine');
       when(mockArtifacts.engineOutPath).thenReturn(globals.fs.path.join('out', 'android_arm'));
 
       final File manifestFile = globals.fs.file('path/to/project/pubspec.yaml');
       manifestFile.createSync(recursive: true);
       manifestFile.writeAsStringSync(manifest);
 
-      // write schemaData otherwise pubspec.yaml file can't be loaded
-      writeEmptySchemaFile(fs);
 
       updateLocalProperties(
         project: FlutterProject.fromPath('path/to/project'),
@@ -705,6 +775,9 @@ flutter:
 
       expect(getGradleVersionFor('3.4.0'), '5.6.2');
       expect(getGradleVersionFor('3.5.0'), '5.6.2');
+
+      expect(getGradleVersionFor('4.0.0'), '6.7');
+      expect(getGradleVersionFor('4.1.0'), '6.7');
     });
 
     testWithoutContext('throws on unsupported versions', () {
@@ -717,7 +790,7 @@ flutter:
     FileSystem fs;
 
     setUp(() {
-      fs = MemoryFileSystem();
+      fs = MemoryFileSystem.test();
     });
 
     testUsingContext('returns true when the project is using AndroidX', () async {
@@ -765,7 +838,7 @@ flutter:
     MockAndroidSdk mockAndroidSdk;
 
     setUp(() {
-      fs = MemoryFileSystem();
+      fs = MemoryFileSystem.test();
       fakeProcessManager = FakeProcessManager.list(<FakeCommand>[]);
       mockAndroidSdk = MockAndroidSdk();
       when(mockAndroidSdk.directory).thenReturn('irrelevant');
@@ -932,8 +1005,7 @@ plugin1=${plugin1.path}
   });
 
   group('gradle build', () {
-    final Usage mockUsage = MockUsage();
-
+    Usage mockUsage;
     MockAndroidSdk mockAndroidSdk;
     MockAndroidStudio mockAndroidStudio;
     MockLocalEngineArtifacts mockArtifacts;
@@ -944,7 +1016,8 @@ plugin1=${plugin1.path}
     Cache cache;
 
     setUp(() {
-      fileSystem = MemoryFileSystem();
+      mockUsage = MockUsage();
+      fileSystem = MemoryFileSystem.test();
       fileSystemUtils = MockFileSystemUtils();
       mockAndroidSdk = MockAndroidSdk();
       mockAndroidStudio = MockAndroidStudio();
@@ -955,7 +1028,7 @@ plugin1=${plugin1.path}
       when(mockAndroidSdk.directory).thenReturn('irrelevant');
 
       final Directory rootDirectory = fileSystem.currentDirectory;
-      cache = Cache(
+      cache = Cache.test(
         rootOverride: rootDirectory,
         fileSystem: fileSystem,
       );
@@ -1259,7 +1332,7 @@ plugin1=${plugin1.path}
       ProcessManager: () => mockProcessManager,
     });
 
-    testUsingContext('logs success event after a sucessful retry', () async {
+    testUsingContext('logs success event after a successful retry', () async {
       int testFnCalled = 0;
       when(mockProcessManager.start(any,
         workingDirectory: anyNamed('workingDirectory'),
@@ -1336,6 +1409,90 @@ plugin1=${plugin1.path}
         any,
         label: 'gradle-random-event-label-success',
         parameters: anyNamed('parameters'),
+      )).called(1);
+    }, overrides: <Type, Generator>{
+      AndroidSdk: () => mockAndroidSdk,
+      Cache: () => cache,
+      FileSystem: () => fileSystem,
+      Platform: () => android,
+      ProcessManager: () => mockProcessManager,
+      Usage: () => mockUsage,
+    });
+
+    testUsingContext('performs code size analysis and sends analytics', () async {
+      when(mockProcessManager.start(any,
+        workingDirectory: anyNamed('workingDirectory'),
+        environment: anyNamed('environment')))
+      .thenAnswer((_) {
+        return Future<Process>.value(createMockProcess(
+          exitCode: 0,
+          stdout: 'irrelevant',
+        ));
+      });
+
+      fileSystem.directory('android')
+        .childFile('build.gradle')
+        .createSync(recursive: true);
+
+      fileSystem.directory('android')
+        .childFile('gradle.properties')
+        .createSync(recursive: true);
+
+      fileSystem.directory('android')
+        .childDirectory('app')
+        .childFile('build.gradle')
+        ..createSync(recursive: true)
+        ..writeAsStringSync('apply from: irrelevant/flutter.gradle');
+
+      final Archive archive = Archive()
+        ..addFile(ArchiveFile('AndroidManifest.xml', 100,  List<int>.filled(100, 0)))
+        ..addFile(ArchiveFile('META-INF/CERT.RSA', 10,  List<int>.filled(10, 0)))
+        ..addFile(ArchiveFile('META-INF/CERT.SF', 10,  List<int>.filled(10, 0)))
+        ..addFile(ArchiveFile('lib/arm64-v8a/libapp.so', 50,  List<int>.filled(50, 0)))
+        ..addFile(ArchiveFile('lib/arm64-v8a/libflutter.so', 50, List<int>.filled(50, 0)));
+
+      fileSystem.directory('build')
+        .childDirectory('app')
+        .childDirectory('outputs')
+        .childDirectory('flutter-apk')
+        .childFile('app-release.apk')
+        ..createSync(recursive: true)
+        ..writeAsBytesSync(ZipEncoder().encode(archive));
+
+      fileSystem.file('foo/snapshot.arm64-v8a.json')
+        ..createSync(recursive: true)
+        ..writeAsStringSync(r'''
+[
+  {
+    "l": "dart:_internal",
+    "c": "SubListIterable",
+    "n": "[Optimized] skip",
+    "s": 2400
+  }
+]''');
+      fileSystem.file('foo/trace.arm64-v8a.json')
+        ..createSync(recursive: true)
+        ..writeAsStringSync('{}');
+
+      await buildGradleApp(
+        project: FlutterProject.current(),
+        androidBuildInfo: const AndroidBuildInfo(
+          BuildInfo(
+            BuildMode.release,
+            null,
+            treeShakeIcons: false,
+            codeSizeDirectory: 'foo',
+          ),
+          targetArchs: <AndroidArch>[AndroidArch.arm64_v8a],
+        ),
+        target: 'lib/main.dart',
+        isBuildingBundle: false,
+        localGradleErrors: <GradleHandledError>[],
+      );
+
+      verify(mockUsage.sendEvent(
+        'code-size-analysis',
+        'apk',
       )).called(1);
     }, overrides: <Type, Generator>{
       AndroidSdk: () => mockAndroidSdk,
@@ -1536,8 +1693,12 @@ plugin1=${plugin1.path}
     });
 
     testUsingContext('build apk uses selected local engine,the engine abi is arm', () async {
-      when(mockArtifacts.getArtifactPath(Artifact.flutterFramework,
-          platform: TargetPlatform.android_arm, mode: anyNamed('mode'))).thenReturn('engine');
+      when(mockArtifacts.getArtifactPath(
+        Artifact.flutterFramework,
+        platform: TargetPlatform.android_arm,
+        mode: anyNamed('mode'),
+        environmentType: anyNamed('environmentType'),
+      )).thenReturn('engine');
       when(mockArtifacts.engineOutPath).thenReturn(fileSystem.path.join('out', 'android_arm'));
 
       fileSystem.file('out/android_arm/flutter_embedding_release.pom')
@@ -1552,8 +1713,10 @@ plugin1=${plugin1.path}
 ''');
       fileSystem.file('out/android_arm/armeabi_v7a_release.pom').createSync(recursive: true);
       fileSystem.file('out/android_arm/armeabi_v7a_release.jar').createSync(recursive: true);
+      fileSystem.file('out/android_arm/armeabi_v7a_release.maven-metadata.xml').createSync(recursive: true);
       fileSystem.file('out/android_arm/flutter_embedding_release.jar').createSync(recursive: true);
       fileSystem.file('out/android_arm/flutter_embedding_release.pom').createSync(recursive: true);
+      fileSystem.file('out/android_arm/flutter_embedding_release.maven-metadata.xml').createSync(recursive: true);
 
       fileSystem.file('android/gradlew').createSync(recursive: true);
 
@@ -1629,8 +1792,12 @@ plugin1=${plugin1.path}
 
     testUsingContext(
         'build apk uses selected local engine,the engine abi is arm64', () async {
-      when(mockArtifacts.getArtifactPath(Artifact.flutterFramework,
-          platform: anyNamed('platform'), mode: anyNamed('mode'))).thenReturn('engine');
+      when(mockArtifacts.getArtifactPath(
+        Artifact.flutterFramework,
+        platform: anyNamed('platform'),
+        mode: anyNamed('mode'),
+        environmentType: anyNamed('environmentType'),
+      )).thenReturn('engine');
       when(mockArtifacts.engineOutPath).thenReturn(fileSystem.path.join('out', 'android_arm64'));
 
       fileSystem.file('out/android_arm64/flutter_embedding_release.pom')
@@ -1645,8 +1812,10 @@ plugin1=${plugin1.path}
 ''');
       fileSystem.file('out/android_arm64/arm64_v8a_release.pom').createSync(recursive: true);
       fileSystem.file('out/android_arm64/arm64_v8a_release.jar').createSync(recursive: true);
+      fileSystem.file('out/android_arm64/arm64_v8a_release.maven-metadata.xml').createSync(recursive: true);
       fileSystem.file('out/android_arm64/flutter_embedding_release.jar').createSync(recursive: true);
       fileSystem.file('out/android_arm64/flutter_embedding_release.pom').createSync(recursive: true);
+      fileSystem.file('out/android_arm64/flutter_embedding_release.maven-metadata.xml').createSync(recursive: true);
 
       fileSystem.file('android/gradlew').createSync(recursive: true);
 
@@ -1722,8 +1891,12 @@ plugin1=${plugin1.path}
 
     testUsingContext(
         'build apk uses selected local engine,the engine abi is x86', () async {
-      when(mockArtifacts.getArtifactPath(Artifact.flutterFramework,
-          platform: anyNamed('platform'), mode: anyNamed('mode'))).thenReturn('engine');
+      when(mockArtifacts.getArtifactPath(
+        Artifact.flutterFramework,
+        platform: anyNamed('platform'),
+        mode: anyNamed('mode'),
+        environmentType: anyNamed('environmentType'),
+      )).thenReturn('engine');
       when(mockArtifacts.engineOutPath).thenReturn(fileSystem.path.join('out', 'android_x86'));
 
       fileSystem.file('out/android_x86/flutter_embedding_release.pom')
@@ -1738,8 +1911,10 @@ plugin1=${plugin1.path}
 ''');
       fileSystem.file('out/android_x86/x86_release.pom').createSync(recursive: true);
       fileSystem.file('out/android_x86/x86_release.jar').createSync(recursive: true);
+      fileSystem.file('out/android_x86/x86_release.maven-metadata.xml').createSync(recursive: true);
       fileSystem.file('out/android_x86/flutter_embedding_release.jar').createSync(recursive: true);
       fileSystem.file('out/android_x86/flutter_embedding_release.pom').createSync(recursive: true);
+      fileSystem.file('out/android_x86/flutter_embedding_release.maven-metadata.xml').createSync(recursive: true);
 
       fileSystem.file('android/gradlew').createSync(recursive: true);
 
@@ -1815,8 +1990,12 @@ plugin1=${plugin1.path}
 
     testUsingContext(
         'build apk uses selected local engine,the engine abi is x64', () async {
-      when(mockArtifacts.getArtifactPath(Artifact.flutterFramework,
-          platform: anyNamed('platform'), mode: anyNamed('mode'))).thenReturn('engine');
+      when(mockArtifacts.getArtifactPath(
+        Artifact.flutterFramework,
+        platform: anyNamed('platform'),
+        mode: anyNamed('mode'),
+        environmentType: anyNamed('environmentType'),
+      )).thenReturn('engine');
       when(mockArtifacts.engineOutPath).thenReturn(fileSystem.path.join('out', 'android_x64'));
 
       fileSystem.file('out/android_x64/flutter_embedding_release.pom')
@@ -1831,8 +2010,10 @@ plugin1=${plugin1.path}
 ''');
       fileSystem.file('out/android_x64/x86_64_release.pom').createSync(recursive: true);
       fileSystem.file('out/android_x64/x86_64_release.jar').createSync(recursive: true);
+      fileSystem.file('out/android_x64/x86_64_release.maven-metadata.xml').createSync(recursive: true);
       fileSystem.file('out/android_x64/flutter_embedding_release.jar').createSync(recursive: true);
       fileSystem.file('out/android_x64/flutter_embedding_release.pom').createSync(recursive: true);
+      fileSystem.file('out/android_x64/flutter_embedding_release.maven-metadata.xml').createSync(recursive: true);
 
       fileSystem.file('android/gradlew').createSync(recursive: true);
 
@@ -1906,9 +2087,66 @@ plugin1=${plugin1.path}
       ProcessManager: () => mockProcessManager,
     });
 
+    testUsingContext('honors --no-android-gradle-daemon setting', () async {
+      (globals.processManager as FakeProcessManager).addCommand(
+        const FakeCommand(command: <String>[
+          '/android/gradlew',
+          '-q',
+          '--no-daemon',
+          '-Ptarget-platform=android-arm,android-arm64,android-x64',
+          '-Ptarget=lib/main.dart',
+          '-Ptrack-widget-creation=false',
+          'assembleRelease'
+        ],
+      ));
+      fileSystem.file('android/gradlew').createSync(recursive: true);
+
+      fileSystem.directory('android')
+          .childFile('gradle.properties')
+          .createSync(recursive: true);
+
+      fileSystem.file('android/build.gradle')
+          .createSync(recursive: true);
+
+      fileSystem.directory('android')
+          .childDirectory('app')
+          .childFile('build.gradle')
+        ..createSync(recursive: true)
+        ..writeAsStringSync('apply from: irrelevant/flutter.gradle');
+
+      await expectLater(() async {
+        await buildGradleApp(
+          project: FlutterProject.current(),
+          androidBuildInfo: const AndroidBuildInfo(
+            BuildInfo(
+              BuildMode.release,
+              null,
+              treeShakeIcons: false,
+              androidGradleDaemon: false,
+            ),
+          ),
+          target: 'lib/main.dart',
+          isBuildingBundle: false,
+          localGradleErrors: const <GradleHandledError>[],
+        );
+      }, throwsToolExit());
+    }, overrides: <Type, Generator>{
+      AndroidSdk: () => mockAndroidSdk,
+      AndroidStudio: () => mockAndroidStudio,
+      Artifacts: () => Artifacts.test(),
+      Cache: () => cache,
+      Platform: () => android,
+      FileSystem: () => fileSystem,
+      ProcessManager: () => FakeProcessManager.list(<FakeCommand>[]),
+    });
+
     testUsingContext('build aar uses selected local engine，the engine abi is arm', () async {
-      when(mockArtifacts.getArtifactPath(Artifact.flutterFramework,
-          platform: TargetPlatform.android_arm, mode: anyNamed('mode'))).thenReturn('engine');
+      when(mockArtifacts.getArtifactPath(
+        Artifact.flutterFramework,
+        platform: TargetPlatform.android_arm,
+        mode: anyNamed('mode'),
+        environmentType: anyNamed('environmentType'),
+      )).thenReturn('engine');
       when(mockArtifacts.engineOutPath).thenReturn(fileSystem.path.join('out', 'android_arm'));
 
       fileSystem.file('out/android_arm/flutter_embedding_release.pom')
@@ -1923,8 +2161,10 @@ plugin1=${plugin1.path}
 ''');
       fileSystem.file('out/android_arm/armeabi_v7a_release.pom').createSync(recursive: true);
       fileSystem.file('out/android_arm/armeabi_v7a_release.jar').createSync(recursive: true);
+      fileSystem.file('out/android_arm/armeabi_v7a_release.maven-metadata.xml').createSync(recursive: true);
       fileSystem.file('out/android_arm/flutter_embedding_release.jar').createSync(recursive: true);
       fileSystem.file('out/android_arm/flutter_embedding_release.pom').createSync(recursive: true);
+      fileSystem.file('out/android_arm/flutter_embedding_release.maven-metadata.xml').createSync(recursive: true);
 
       final File manifestFile = fileSystem.file('pubspec.yaml');
       manifestFile.createSync(recursive: true);
@@ -2004,8 +2244,12 @@ plugin1=${plugin1.path}
 
     testUsingContext(
         'build aar uses selected local engine，the engine abi is arm64', () async {
-      when(mockArtifacts.getArtifactPath(Artifact.flutterFramework,
-          platform: anyNamed('platform'), mode: anyNamed('mode'))).thenReturn('engine');
+      when(mockArtifacts.getArtifactPath(
+        Artifact.flutterFramework,
+        platform: anyNamed('platform'),
+        mode: anyNamed('mode'),
+        environmentType: anyNamed('environmentType'),
+      )).thenReturn('engine');
       when(mockArtifacts.engineOutPath).thenReturn(fileSystem.path.join('out', 'android_arm64'));
 
       fileSystem.file('out/android_arm64/flutter_embedding_release.pom')
@@ -2020,8 +2264,10 @@ plugin1=${plugin1.path}
 ''');
       fileSystem.file('out/android_arm64/arm64_v8a_release.pom').createSync(recursive: true);
       fileSystem.file('out/android_arm64/arm64_v8a_release.jar').createSync(recursive: true);
+      fileSystem.file('out/android_arm64/arm64_v8a_release.maven-metadata.xml').createSync(recursive: true);
       fileSystem.file('out/android_arm64/flutter_embedding_release.jar').createSync(recursive: true);
       fileSystem.file('out/android_arm64/flutter_embedding_release.pom').createSync(recursive: true);
+      fileSystem.file('out/android_arm64/flutter_embedding_release.maven-metadata.xml').createSync(recursive: true);
 
       final File manifestFile = fileSystem.file('pubspec.yaml');
       manifestFile.createSync(recursive: true);
@@ -2102,8 +2348,12 @@ plugin1=${plugin1.path}
 
     testUsingContext(
         'build aar uses selected local engine，the engine abi is x86', () async {
-      when(mockArtifacts.getArtifactPath(Artifact.flutterFramework,
-          platform: anyNamed('platform'), mode: anyNamed('mode'))).thenReturn('engine');
+      when(mockArtifacts.getArtifactPath(
+        Artifact.flutterFramework,
+        platform: anyNamed('platform'),
+        mode: anyNamed('mode'),
+        environmentType: anyNamed('environmentType'),
+      )).thenReturn('engine');
       when(mockArtifacts.engineOutPath).thenReturn(fileSystem.path.join('out', 'android_x86'));
 
       fileSystem.file('out/android_x86/flutter_embedding_release.pom')
@@ -2118,8 +2368,10 @@ plugin1=${plugin1.path}
 ''');
       fileSystem.file('out/android_x86/x86_release.pom').createSync(recursive: true);
       fileSystem.file('out/android_x86/x86_release.jar').createSync(recursive: true);
+      fileSystem.file('out/android_x86/x86_release.maven-metadata.xml').createSync(recursive: true);
       fileSystem.file('out/android_x86/flutter_embedding_release.jar').createSync(recursive: true);
       fileSystem.file('out/android_x86/flutter_embedding_release.pom').createSync(recursive: true);
+      fileSystem.file('out/android_x86/flutter_embedding_release.maven-metadata.xml').createSync(recursive: true);
 
       final File manifestFile = fileSystem.file('pubspec.yaml');
       manifestFile.createSync(recursive: true);
@@ -2200,8 +2452,12 @@ plugin1=${plugin1.path}
 
     testUsingContext(
         'build aar uses selected local engine，the engine abi is x64', () async {
-      when(mockArtifacts.getArtifactPath(Artifact.flutterFramework,
-          platform: anyNamed('platform'), mode: anyNamed('mode'))).thenReturn('engine');
+      when(mockArtifacts.getArtifactPath(
+        Artifact.flutterFramework,
+        platform: anyNamed('platform'),
+        mode: anyNamed('mode'),
+        environmentType: anyNamed('environmentType'),
+      )).thenReturn('engine');
       when(mockArtifacts.engineOutPath).thenReturn(fileSystem.path.join('out', 'android_x64'));
 
       fileSystem.file('out/android_x64/flutter_embedding_release.pom')
@@ -2216,8 +2472,10 @@ plugin1=${plugin1.path}
 ''');
       fileSystem.file('out/android_x64/x86_64_release.pom').createSync(recursive: true);
       fileSystem.file('out/android_x64/x86_64_release.jar').createSync(recursive: true);
+      fileSystem.file('out/android_x64/x86_64_release.maven-metadata.xml').createSync(recursive: true);
       fileSystem.file('out/android_x64/flutter_embedding_release.jar').createSync(recursive: true);
       fileSystem.file('out/android_x64/flutter_embedding_release.pom').createSync(recursive: true);
+      fileSystem.file('out/android_x64/flutter_embedding_release.maven-metadata.xml').createSync(recursive: true);
 
       final File manifestFile = fileSystem.file('pubspec.yaml');
       manifestFile.createSync(recursive: true);
@@ -2330,7 +2588,7 @@ plugin1=${plugin1.path}
           "            url 'build/'\n"
           '        }\n'
           '        maven {\n'
-          "            url '\$storageUrl/download.flutter.io'\n"
+          '            url "\$storageUrl/download.flutter.io"\n'
           '        }\n'
           '      }\n'
           '\n'
@@ -2381,7 +2639,7 @@ plugin1=${plugin1.path}
           "            url 'build/'\n"
           '        }\n'
           '        maven {\n'
-          "            url '\$storageUrl/download.flutter.io'\n"
+          '            url "\$storageUrl/download.flutter.io"\n'
           '        }\n'
           '      }\n'
           '\n'
@@ -2419,7 +2677,7 @@ plugin1=${plugin1.path}
           "            url 'build/'\n"
           '        }\n'
           '        maven {\n'
-          "            url '\$storageUrl/download.flutter.io'\n"
+          '            url "\$storageUrl/download.flutter.io"\n'
           '        }\n'
           '      }\n'
           '\n'
@@ -2458,7 +2716,7 @@ plugin1=${plugin1.path}
           "            url 'build/'\n"
           '        }\n'
           '        maven {\n'
-          "            url '\$storageUrl/download.flutter.io'\n"
+          '            url "\$storageUrl/download.flutter.io"\n'
           '        }\n'
           '      }\n'
           '\n'
@@ -2495,7 +2753,7 @@ plugin1=${plugin1.path}
       legacySettingsDotGradleFiles.readAsStringSync().split(';EOF').map<String>((String body) => body.trim()),
       contains(templateSettingsDotGradle.readAsStringSync().trim()),
     );
-  });
+  }, skip: true); // TODO(jonahwilliams): This is an integration test and should be moved to the integration shard.
 }
 
 /// Generates a fake app bundle at the location [directoryName]/[fileName].

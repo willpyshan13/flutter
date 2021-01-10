@@ -2,7 +2,6 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import 'dart:async';
 import 'dart:math' as math;
 
 import '../asset.dart';
@@ -11,7 +10,6 @@ import '../base/file_system.dart';
 import '../build_info.dart';
 import '../bundle.dart';
 import '../cache.dart';
-import '../dart/pub.dart';
 import '../devfs.dart';
 import '../globals.dart' as globals;
 import '../project.dart';
@@ -33,6 +31,8 @@ class TestCommand extends FlutterCommand {
     addNullSafetyModeOptions(hide: !verboseHelp);
     usesTrackWidgetCreation(verboseHelp: verboseHelp);
     addEnableExperimentation(hide: !verboseHelp);
+    usesDartDefineOption();
+    usesWebRendererOption();
     argParser
       ..addMultiOption('name',
         help: 'A regular expression matching substrings of the names of tests to run.',
@@ -110,10 +110,14 @@ class TestCommand extends FlutterCommand {
         help: 'Whether to build the assets bundle for testing.\n'
               'Consider using --no-test-assets if assets are not required.',
       )
+      // --platform is not supported to be used by Flutter developers. It only
+      // exists to test the Flutter framework itself and may be removed entirely
+      // in the future. Developers should either use plain `flutter test`, or
+      // `package:integration_test` instead.
       ..addOption('platform',
         allowed: const <String>['tester', 'chrome'],
+        hide: true,
         defaultsTo: 'tester',
-        help: 'The platform to run the unit tests on. Defaults to "tester".',
       )
       ..addOption('test-randomize-ordering-seed',
         help: 'The seed to randomize the execution order of test cases.\n'
@@ -129,7 +133,19 @@ class TestCommand extends FlutterCommand {
               'interact with the vmservice at runtime.\n'
               'This flag is ignored if --start-paused or coverage are requested. '
               'The vmservice will be enabled no matter what in those cases.'
+      )
+      ..addOption('reporter',
+        abbr: 'r',
+        defaultsTo: 'compact',
+        help: 'Set how to print test results.\n'
+        '[compact] (default)         A single line, updated continuously.\n'
+        '[expanded]                  A separate line for each update.\n'
+        '[json]                      A machine-readable format (see https://dart.dev/go/test-docs/json_reporter.md).\n')
+      ..addOption('timeout',
+        help: 'The default test timeout. For example: 15s, 2x, none. Defaults to "30s"',
+        defaultsTo: '30s',
       );
+      addDdsOptions(verboseHelp: verboseHelp);
   }
 
   /// The interface for starting and configuring the tester.
@@ -163,18 +179,24 @@ class TestCommand extends FlutterCommand {
         'directory (or one of its subdirectories).');
     }
     final FlutterProject flutterProject = FlutterProject.current();
-    if (shouldRunPub) {
-      await pub.get(
-        context: PubContext.getVerifyContext(name),
-        skipPubspecYamlCheck: true,
-        generateSyntheticPackage: flutterProject.manifest.generateSyntheticPackage,
-      );
-    }
     final bool buildTestAssets = boolArg('test-assets');
     final List<String> names = stringsArg('name');
     final List<String> plainNames = stringsArg('plain-name');
     final String tags = stringArg('tags');
     final String excludeTags = stringArg('exclude-tags');
+    final BuildInfo buildInfo = await getBuildInfo(forcedBuildMode: BuildMode.debug);
+
+    if (buildInfo.packageConfig['test_api'] == null) {
+      globals.printError(
+        '\n'
+        'Error: cannot run without a dependency on either "package:flutter_test" or "package:test". '
+        'Ensure the following lines are present in your pubspec.yaml:'
+        '\n\n'
+        'dev_dependencies:\n'
+        '  flutter_test:\n'
+        '    sdk: flutter\n',
+      );
+    }
 
     if (buildTestAssets && flutterProject.manifest.assets.isNotEmpty) {
       await _buildTestAsset();
@@ -229,6 +251,9 @@ class TestCommand extends FlutterCommand {
       collector = CoverageCollector(
         verbose: !machine,
         libraryPredicate: (String libraryName) => libraryName.contains(projectName),
+        // TODO(jonahwilliams): file bug for incorrect URI handling on windows
+        packagesPath: globals.fs.file(buildInfo.packagesPath)
+          .parent.parent.childFile('.packages').path
       );
     }
 
@@ -239,8 +264,7 @@ class TestCommand extends FlutterCommand {
       watcher = collector;
     }
 
-    final bool disableServiceAuthCodes =
-      boolArg('disable-service-auth-codes');
+    final bool disableServiceAuthCodes = boolArg('disable-service-auth-codes');
 
     final int result = await testRunner.runTests(
       testWrapper,
@@ -254,17 +278,19 @@ class TestCommand extends FlutterCommand {
       enableObservatory: collector != null || startPaused || boolArg('enable-vmservice'),
       startPaused: startPaused,
       disableServiceAuthCodes: disableServiceAuthCodes,
+      disableDds: disableDds,
       ipv6: boolArg('ipv6'),
       machine: machine,
-      buildMode: BuildMode.debug,
-      trackWidgetCreation: boolArg('track-widget-creation'),
+      buildInfo: buildInfo,
       updateGoldens: boolArg('update-goldens'),
       concurrency: jobs,
       buildTestAssets: buildTestAssets,
       flutterProject: flutterProject,
       web: stringArg('platform') == 'chrome',
       randomSeed: stringArg('test-randomize-ordering-seed'),
-      extraFrontEndOptions: getBuildInfo(forcedBuildMode: BuildMode.debug).extraFrontEndOptions,
+      nullAssertions: boolArg(FlutterOptions.kNullAssertions),
+      reporter: stringArg('reporter'),
+      timeout: stringArg('timeout'),
     );
 
     if (collector != null) {

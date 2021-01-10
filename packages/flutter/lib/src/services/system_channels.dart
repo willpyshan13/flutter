@@ -26,16 +26,18 @@ class SystemChannels {
   ///  * `pushRoute`, which is called with a single string argument when the
   ///    operating system instructs the application to open a particular page.
   ///
+  ///  * `pushRouteInformation`, which is called with a map, which contains a
+  ///    location string and a state object, when the operating system instructs
+  ///    the application to open a particular page. These parameters are stored
+  ///    under the key `location` and `state` in the map.
+  ///
   /// The following methods are used for the opposite direction data flow. The
   /// framework notifies the engine about the route changes.
   ///
-  ///  * `routePushed`, which is called when a route is pushed. (e.g. A modal
-  ///    replaces the entire screen.)
+  ///  * `routeUpdated`, which is called when current route has changed.
   ///
-  ///  * `routePopped`, which is called when a route is popped. (e.g. A dialog,
-  ///    such as time picker is closed.)
-  ///
-  ///  * `routeReplaced`, which is called when a route is replaced.
+  ///  * `routeInformationUpdated`, which is called by the [Router] when the
+  ///    application navigate to a new location.
   ///
   /// See also:
   ///
@@ -46,7 +48,7 @@ class SystemChannels {
   ///    [Navigator.push], [Navigator.pushReplacement], [Navigator.pop] and
   ///    [Navigator.replace], utilize this channel's methods to send route
   ///    change information from framework to engine.
-  static const MethodChannel navigation = MethodChannel(
+  static const MethodChannel navigation = OptionalMethodChannel(
       'flutter/navigation',
       JSONMethodCodec(),
   );
@@ -314,6 +316,32 @@ class SystemChannels {
   ///    restoration data is used in Flutter.
   static const MethodChannel restoration = OptionalMethodChannel(
     'flutter/restoration',
+    StandardMethodCodec(),
+  );
+
+  /// A [MethodChannel] for installing and managing dynamic features.
+  ///
+  /// The following outgoing methods are defined for this channel (invoked using
+  /// [OptionalMethodChannel.invokeMethod]):
+  ///
+  ///  * `installDynamicFeature`: Requests that a dynamic feature identified by
+  ///    the provided loadingUnitId or moduleName be downloaded and installed.
+  ///    Providing a loadingUnitId with null moduleName will install a dynamic
+  ///    feature module that includes the desired loading unit. If a moduleName
+  ///    is provided, then the dynamic feature with the moduleName will be installed.
+  ///    This method returns a future that will not be completed until the
+  ///    feature is fully installed and ready to use. When an error occurs, the
+  ///    future will complete an error. Calling `loadLibrary()` on a deferred
+  ///    imported library is equivalent to calling this method with a
+  ///    loadingUnitId and null moduleName.
+  ///  * `getDynamicFeatureInstallState`: Gets the current installation state of
+  ///    the dynamic feature identified by the loadingUnitId or moduleName.
+  ///    This method returns a string that represents the state. Depending on
+  ///    the implementation, this string may vary, but the default Google Play
+  ///    Store implementation beings in the "Requested" state before transitioning
+  ///    into the "Downloading" and finally the "Installed" state.
+  static const MethodChannel dynamicfeature = OptionalMethodChannel(
+    'flutter/dynamicfeature',
     StandardMethodCodec(),
   );
 }
