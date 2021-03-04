@@ -709,8 +709,6 @@ class _AppBarState extends State<AppBar> {
     Scaffold.of(context).openEndDrawer();
   }
 
-  bool? hadBackButtonWhenRouteWasActive;
-
   @override
   Widget build(BuildContext context) {
     assert(!widget.primary || debugCheckHasMediaQuery(context));
@@ -723,11 +721,7 @@ class _AppBarState extends State<AppBar> {
 
     final bool hasDrawer = scaffold?.hasDrawer ?? false;
     final bool hasEndDrawer = scaffold?.hasEndDrawer ?? false;
-    hadBackButtonWhenRouteWasActive ??= false;
-    if (parentRoute?.isActive == true) {
-      hadBackButtonWhenRouteWasActive = parentRoute!.canPop;
-    }
-    assert(hadBackButtonWhenRouteWasActive != null);
+    final bool canPop = parentRoute?.canPop ?? false;
     final bool useCloseButton = parentRoute is PageRoute<dynamic> && parentRoute.fullscreenDialog;
 
     final double toolbarHeight = widget.toolbarHeight ?? kToolbarHeight;
@@ -735,7 +729,7 @@ class _AppBarState extends State<AppBar> {
 
     final Color backgroundColor = backwardsCompatibility
       ? widget.backgroundColor
-        ?? appBarTheme.color
+        ?? appBarTheme.backgroundColor
         ?? theme.primaryColor
       : widget.backgroundColor
         ?? appBarTheme.backgroundColor
@@ -796,7 +790,7 @@ class _AppBarState extends State<AppBar> {
           tooltip: MaterialLocalizations.of(context).openAppDrawerTooltip,
         );
       } else {
-        if (!hasEndDrawer && hadBackButtonWhenRouteWasActive!)
+        if (!hasEndDrawer && canPop)
           leading = useCloseButton ? const CloseButton() : const BackButton();
       }
     }
@@ -1111,7 +1105,7 @@ class _SliverAppBarDelegate extends SliverPersistentHeaderDelegate {
   final ShapeBorder? shape;
   final double? toolbarHeight;
   final double? leadingWidth;
-  final bool backwardsCompatibility;
+  final bool? backwardsCompatibility;
   final TextStyle? toolbarTextStyle;
   final TextStyle? titleTextStyle;
   final SystemUiOverlayStyle? systemOverlayStyle;
@@ -1160,7 +1154,7 @@ class _SliverAppBarDelegate extends SliverPersistentHeaderDelegate {
           ? Semantics(child: flexibleSpace, header: true)
           : flexibleSpace,
         bottom: bottom,
-        elevation: forceElevated || overlapsContent || (pinned && shrinkOffset > maxExtent - minExtent) ? elevation ?? 4.0 : 0.0,
+        elevation: forceElevated || overlapsContent || (pinned && shrinkOffset > maxExtent - minExtent) ? elevation : 0.0,
         shadowColor: shadowColor,
         backgroundColor: backgroundColor,
         foregroundColor: foregroundColor,
@@ -1456,7 +1450,7 @@ class SliverAppBar extends StatefulWidget {
     this.shape,
     this.toolbarHeight = kToolbarHeight,
     this.leadingWidth,
-    this.backwardsCompatibility = true,
+    this.backwardsCompatibility,
     this.toolbarTextStyle,
     this.titleTextStyle,
     this.systemOverlayStyle,
@@ -1708,7 +1702,7 @@ class SliverAppBar extends StatefulWidget {
   /// {@macro flutter.material.appbar.backwardsCompatibility}
   ///
   /// This property is used to configure an [AppBar].
-  final bool backwardsCompatibility;
+  final bool? backwardsCompatibility;
 
   /// {@macro flutter.material.appbar.toolbarTextStyle}
   ///
