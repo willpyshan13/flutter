@@ -2,9 +2,6 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-// @dart = 2.8
-
-import 'package:meta/meta.dart';
 import 'package:package_config/package_config.dart';
 
 /// The JavaScript bootstrap script to support in-browser hot restart.
@@ -17,11 +14,52 @@ import 'package:package_config/package_config.dart';
 /// and is responsible for bootstrapping the RequireJS modules and attaching
 /// the hot reload hooks.
 String generateBootstrapScript({
-  @required String requireUrl,
-  @required String mapperUrl,
+  required String requireUrl,
+  required String mapperUrl,
 }) {
   return '''
 "use strict";
+
+var styles = `
+  .flutter-loader {
+    width: 100px;
+    height: 100px;
+    border: 10px solid #075b9a;
+    border-bottom-color: #60caf6;
+    border-radius: 50%;
+    display: inline-block;
+    box-sizing: border-box;
+    animation: rotation 1s linear infinite;
+    position: absolute;
+    left: calc(50% - 50px);
+    top: calc(50% - 50px);
+    -webkit-transform: translate(-50%, -50%);
+    transform: translate(-50%, -50%);
+  }
+
+  @keyframes rotation {
+    0% {
+      transform: rotate(0deg);
+    }
+    100% {
+      transform: rotate(360deg);
+    }
+  }
+`;
+
+var styleSheet = document.createElement("style")
+styleSheet.type = "text/css"
+styleSheet.innerText = styles
+document.head.appendChild(styleSheet)
+
+var loader = document.createElement('div');
+loader.className = "flutter-loader";
+document.body.append(loader);
+
+document.addEventListener('dart-app-ready', function (e) {
+   loader.parentNode.removeChild(loader);
+   styleSheet.parentNode.removeChild(styleSheet);
+});
 
 // Attach source mapping.
 var mapperEl = document.createElement("script");
@@ -54,9 +92,9 @@ document.head.appendChild(requireEl);
 /// `foo__bar__baz`. Rather than attempt to guess, we assume the first property of
 /// this object is the module.
 String generateMainModule({
-  @required String entrypoint,
-  @required bool nullAssertions,
-  @required bool nativeNullAssertions,
+  required String entrypoint,
+  required bool nullAssertions,
+  required bool nativeNullAssertions,
   String bootstrapModule = 'main_module.bootstrap',
 }) {
   // TODO(jonahwilliams): fix typo in dwds and update.
@@ -102,10 +140,10 @@ define("$bootstrapModule", ["$entrypoint", "dart_sdk"], function(app, dart_sdk) 
 ///
 /// This hard-codes the device pixel ratio to 3.0 and a 2400 x 1800 window size.
 String generateTestEntrypoint({
-  @required String relativeTestPath,
-  @required String absolutePath,
-  @required String testConfigPath,
-  @required LanguageVersion languageVersion,
+  required String relativeTestPath,
+  required String absolutePath,
+  required String? testConfigPath,
+  required LanguageVersion languageVersion,
 }) {
   return '''
   // @dart = ${languageVersion.major}.${languageVersion.minor}
@@ -138,14 +176,6 @@ String generateTestEntrypoint({
   }
 
   StreamChannel serializeSuite(Function getMain(), {bool hidePrints = true}) => RemoteListener.start(getMain, hidePrints: hidePrints);
-
-  StreamChannel suiteChannel(String name) {
-    var manager = SuiteChannelManager.current;
-    if (manager == null) {
-      throw StateError('suiteChannel() may only be called within a test worker.');
-    }
-    return manager.connectOut(name);
-  }
 
   StreamChannel postMessageChannel() {
     var controller = StreamChannelController(sync: true);

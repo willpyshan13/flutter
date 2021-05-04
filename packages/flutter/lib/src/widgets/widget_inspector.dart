@@ -767,7 +767,7 @@ mixin WidgetInspectorService {
   /// name "ext.flutter.inspector.name"), which takes no arguments.
   void _registerSignalServiceExtension({
     required String name,
-    required FutureOr<Object?> callback(),
+    required FutureOr<Object?> Function() callback,
   }) {
     registerServiceExtension(
       name: name,
@@ -785,7 +785,7 @@ mixin WidgetInspectorService {
   /// references to avoid leaking memory.
   void _registerObjectGroupServiceExtension({
     required String name,
-    required FutureOr<Object?> callback(String objectGroup),
+    required FutureOr<Object?> Function(String objectGroup) callback,
   }) {
     registerServiceExtension(
       name: name,
@@ -854,7 +854,7 @@ mixin WidgetInspectorService {
   /// lifetimes of object references in the returned JSON (see [disposeGroup]).
   void _registerServiceExtensionWithArg({
     required String name,
-    required FutureOr<Object?> callback(String? objectId, String objectGroup),
+    required FutureOr<Object?> Function(String? objectId, String objectGroup) callback,
   }) {
     registerServiceExtension(
       name: name,
@@ -872,7 +872,7 @@ mixin WidgetInspectorService {
   /// "arg0", "arg1", "arg2", ..., "argn".
   void _registerServiceExtensionVarArgs({
     required String name,
-    required FutureOr<Object?> callback(List<String> args),
+    required FutureOr<Object?> Function(List<String> args) callback,
   }) {
     registerServiceExtension(
       name: name,
@@ -1205,12 +1205,26 @@ mixin WidgetInspectorService {
   ///
   /// Use this method only for testing to ensure that object references from one
   /// test case do not impact other test cases.
+  @visibleForTesting
   @protected
   void disposeAllGroups() {
     _groups.clear();
     _idToReferenceData.clear();
     _objectToId.clear();
     _nextId = 0;
+  }
+
+  /// Reset all InspectorService state.
+  ///
+  /// Use this method only for testing to write hermetic tests for
+  /// WidgetInspectorService.
+  @visibleForTesting
+  @protected
+  @mustCallSuper
+  void resetAllState() {
+    disposeAllGroups();
+    selection.clear();
+    setPubRootDirectories(<String>[]);
   }
 
   /// Free all references to objects in a group.
@@ -1511,7 +1525,7 @@ mixin WidgetInspectorService {
     if (location == null || location.file == null) {
       return false;
     }
-    final String file = Uri.parse(location.file).path;
+    final String file = Uri.parse(location.file!).path;
 
     // By default check whether the creation location was within package:flutter.
     if (_pubRootDirectories == null) {
@@ -1544,8 +1558,9 @@ mixin WidgetInspectorService {
 
   List<DiagnosticsNode> _truncateNodes(Iterable<DiagnosticsNode> nodes, int maxDescendentsTruncatableNode) {
     if (nodes.every((DiagnosticsNode node) => node.value is Element) && isWidgetCreationTracked()) {
-      final List<DiagnosticsNode> localNodes = nodes.where((DiagnosticsNode node) =>
-          _isValueCreatedByLocalProject(node.value)).toList();
+      final List<DiagnosticsNode> localNodes = nodes
+        .where((DiagnosticsNode node) => _isValueCreatedByLocalProject(node.value))
+        .toList();
       if (localNodes.isNotEmpty) {
         return localNodes;
       }
@@ -2107,11 +2122,13 @@ class _ElementLocationStatsTracker {
       final Map<String, List<int>> locationsJson = <String, List<int>>{};
       for (final _LocationCount entry in newLocations) {
         final _Location location = entry.location;
-        final List<int> jsonForFile = locationsJson.putIfAbsent(
-          location.file,
-          () => <int>[],
-        );
-        jsonForFile..add(entry.id)..add(location.line)..add(location.column);
+        if (location.file != null) {
+          final List<int> jsonForFile = locationsJson.putIfAbsent(
+            location.file!,
+            () => <int>[],
+          );
+          jsonForFile..add(entry.id)..add(location.line)..add(location.column);
+        }
       }
       json['newLocations'] = locationsJson;
     }
@@ -2412,7 +2429,8 @@ class InspectorSelection {
   /// Setting [candidates] or calling [clear] resets the selection.
   ///
   /// Returns null if the selection is invalid.
-  RenderObject? get current => _current;
+  RenderObject? get current => active ? _current : null;
+
   RenderObject? _current;
   set current(RenderObject? value) {
     if (_current != value) {
@@ -2426,7 +2444,10 @@ class InspectorSelection {
   /// Setting [candidates] or calling [clear] resets the selection.
   ///
   /// Returns null if the selection is invalid.
-  Element? get currentElement => _currentElement;
+  Element? get currentElement {
+    return _currentElement?.debugIsDefunct ?? true ? null : _currentElement;
+  }
+
   Element? _currentElement;
   set currentElement(Element? element) {
     if (currentElement != element) {
@@ -2590,7 +2611,7 @@ class _InspectorOverlayLayer extends Layer {
       throw FlutterError.fromParts(<DiagnosticsNode>[
         ErrorSummary(
           'The inspector should never be used in production mode due to the '
-          'negative performance impact.'
+          'negative performance impact.',
         ),
       ]);
     }
@@ -2688,7 +2709,8 @@ class _InspectorOverlayLayer extends Layer {
     }
 
     final Rect targetRect = MatrixUtils.transformRect(
-        state.selected.transform, state.selected.rect);
+      state.selected.transform, state.selected.rect,
+    );
     final Offset target = Offset(targetRect.left, targetRect.center.dy);
     const double offsetFromWidget = 9.0;
     final double verticalOffset = (targetRect.height) / 2 + offsetFromWidget;
@@ -2755,7 +2777,7 @@ class _InspectorOverlayLayer extends Layer {
       Offset(wedgeX + wedgeSize, wedgeY),
       Offset(wedgeX, wedgeY + (tooltipBelow ? -wedgeSize : wedgeSize)),
     ];
-    canvas.drawPath(Path()..addPolygon(wedge, true,), tooltipBackground);
+    canvas.drawPath(Path()..addPolygon(wedge, true), tooltipBackground);
     _textPainter!.paint(canvas, tipOffset + const Offset(_kTooltipPadding, _kTooltipPadding));
     canvas.restore();
   }
@@ -2824,7 +2846,7 @@ class _Location {
   });
 
   /// File path of the location.
-  final String file;
+  final String? file;
 
   /// 1-based line number.
   final int line;
@@ -2848,7 +2870,8 @@ class _Location {
     }
     if (parameterLocations != null) {
       json['parameterLocations'] = parameterLocations!.map<Map<String, Object?>>(
-          (_Location location) => location.toJsonMap()).toList();
+        (_Location location) => location.toJsonMap(),
+      ).toList();
     }
     return json;
   }
@@ -2859,7 +2882,9 @@ class _Location {
     if (name != null) {
       parts.add(name!);
     }
-    parts.add(file);
+    if (file != null) {
+      parts.add(file!);
+    }
     parts..add('$line')..add('$column');
     return parts.join(':');
   }
@@ -2871,7 +2896,12 @@ bool _isDebugCreator(DiagnosticsNode node) => node is DiagnosticsDebugCreator;
 ///
 /// This function will be registered to [FlutterErrorDetails.propertiesTransformers]
 /// in [WidgetsBinding.initInstances].
-Iterable<DiagnosticsNode> transformDebugCreator(Iterable<DiagnosticsNode> properties) sync* {
+///
+/// This is meant to be called only in debug mode. In other modes, it yields an empty list.
+Iterable<DiagnosticsNode> debugTransformDebugCreator(Iterable<DiagnosticsNode> properties) sync* {
+  if (!kDebugMode) {
+    return;
+  }
   final List<DiagnosticsNode> pending = <DiagnosticsNode>[];
   ErrorSummary? errorSummary;
   for (final DiagnosticsNode node in properties) {
@@ -2941,8 +2971,6 @@ Iterable<DiagnosticsNode> _describeRelevantUserCode(
     // TODO(chunhtai): should print out all the widgets that are about to cross
     // package boundaries.
     if (debugIsLocalCreationLocation(target)) {
-
-
       DiagnosticsNode? devToolsDiagnostic;
 
       // TODO(kenz): once the inspector is better at dealing with broken trees,
@@ -2950,7 +2978,7 @@ Iterable<DiagnosticsNode> _describeRelevantUserCode(
       // errors. See https://github.com/flutter/flutter/issues/74918.
       if (isOverflowError()) {
         final String? devToolsInspectorUri =
-        WidgetInspectorService.instance._devToolsInspectorUriForElement(target);
+          WidgetInspectorService.instance._devToolsInspectorUriForElement(target);
         if (devToolsInspectorUri != null) {
           devToolsDiagnostic = DevToolsDeepLinkProperty(
             'To inspect this widget in Flutter DevTools, visit: $devToolsInspectorUri',
@@ -3036,7 +3064,7 @@ String? _describeCreationLocation(Object object) {
 ///
 /// Currently creation locations are only available for [Widget] and [Element].
 _Location? _getCreationLocation(Object? object) {
-  final Object? candidate =  object is Element ? object.widget : object;
+  final Object? candidate =  object is Element && !object.debugIsDefunct ? object.widget : object;
   return candidate is _HasCreationLocation ? candidate._location : null;
 }
 

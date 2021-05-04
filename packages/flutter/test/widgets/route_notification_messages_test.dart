@@ -4,9 +4,9 @@
 
 @TestOn('!chrome')
 import 'package:flutter/foundation.dart';
-import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_test/flutter_test.dart';
 
 class OnTapPage extends StatelessWidget {
   const OnTapPage({Key? key, required this.id, required this.onTap}) : super(key: key);
@@ -21,10 +21,8 @@ class OnTapPage extends StatelessWidget {
       body: GestureDetector(
         onTap: onTap,
         behavior: HitTestBehavior.opaque,
-        child: Container(
-          child: Center(
-            child: Text(id, style: Theme.of(context).textTheme.headline3),
-          ),
+        child: Center(
+          child: Text(id, style: Theme.of(context).textTheme.headline3),
         ),
       ),
     );
@@ -45,17 +43,19 @@ void main() {
           id: '/',
           onTap: () {
             Navigator.pushNamed(context, '/A');
-          }),
+          },
+        ),
       '/A': (BuildContext context) => OnTapPage(
           id: 'A',
           onTap: () {
             Navigator.pop(context);
-          }),
+          },
+        ),
     };
 
     final List<MethodCall> log = <MethodCall>[];
 
-    SystemChannels.navigation.setMockMethodCallHandler((MethodCall methodCall) async {
+    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(SystemChannels.navigation, (MethodCall methodCall) async {
       log.add(methodCall);
     });
 
@@ -65,14 +65,15 @@ void main() {
 
     expect(log, hasLength(1));
     expect(
-        log.last,
-        isMethodCall(
-          'routeUpdated',
-          arguments: <String, dynamic>{
-            'previousRouteName': null,
-            'routeName': '/',
-          },
-        ));
+      log.last,
+      isMethodCall(
+        'routeUpdated',
+        arguments: <String, dynamic>{
+          'previousRouteName': null,
+          'routeName': '/',
+        },
+      ),
+    );
 
     await tester.tap(find.text('/'));
     await tester.pump();
@@ -80,14 +81,15 @@ void main() {
 
     expect(log, hasLength(2));
     expect(
-        log.last,
-        isMethodCall(
-          'routeUpdated',
-          arguments: <String, dynamic>{
-            'previousRouteName': '/',
-            'routeName': '/A',
-          },
-        ));
+      log.last,
+      isMethodCall(
+        'routeUpdated',
+        arguments: <String, dynamic>{
+          'previousRouteName': '/',
+          'routeName': '/A',
+        },
+      ),
+    );
 
     await tester.tap(find.text('A'));
     await tester.pump();
@@ -95,19 +97,20 @@ void main() {
 
     expect(log, hasLength(3));
     expect(
-        log.last,
-        isMethodCall(
-          'routeUpdated',
-          arguments: <String, dynamic>{
-            'previousRouteName': '/A',
-            'routeName': '/',
-          },
-        ));
+      log.last,
+      isMethodCall(
+        'routeUpdated',
+        arguments: <String, dynamic>{
+          'previousRouteName': '/A',
+          'routeName': '/',
+        },
+      ),
+    );
   });
 
   testWidgets('Navigator does not report route name by default', (WidgetTester tester) async {
     final List<MethodCall> log = <MethodCall>[];
-    SystemChannels.navigation.setMockMethodCallHandler((MethodCall methodCall) async {
+    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(SystemChannels.navigation, (MethodCall methodCall) async {
       log.add(methodCall);
     });
 
@@ -118,7 +121,7 @@ void main() {
           TestPage(name: '/'),
         ],
         onPopPage: (Route<void> route, void result) => false,
-      )
+      ),
     ));
 
     expect(log, hasLength(0));
@@ -128,10 +131,10 @@ void main() {
       child: Navigator(
         pages: const <Page<void>>[
           TestPage(name: '/'),
-          TestPage(name: '/abc',),
+          TestPage(name: '/abc'),
         ],
         onPopPage: (Route<void> route, void result) => false,
-      )
+      ),
     ));
 
     await tester.pumpAndSettle();
@@ -144,18 +147,20 @@ void main() {
           id: '/',
           onTap: () {
             Navigator.pushNamed(context, '/A');
-          }),
+          },
+        ),
       '/A': (BuildContext context) => OnTapPage(
           id: 'A',
           onTap: () {
             Navigator.pushReplacementNamed(context, '/B');
-          }),
+          },
+        ),
       '/B': (BuildContext context) => OnTapPage(id: 'B', onTap: () {}),
     };
 
     final List<MethodCall> log = <MethodCall>[];
 
-    SystemChannels.navigation.setMockMethodCallHandler((MethodCall methodCall) async {
+    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(SystemChannels.navigation, (MethodCall methodCall) async {
       log.add(methodCall);
     });
 
@@ -165,14 +170,15 @@ void main() {
 
     expect(log, hasLength(1));
     expect(
-        log.last,
-        isMethodCall(
-          'routeUpdated',
-          arguments: <String, dynamic>{
-            'previousRouteName': null,
-            'routeName': '/',
-          },
-        ));
+      log.last,
+      isMethodCall(
+        'routeUpdated',
+        arguments: <String, dynamic>{
+          'previousRouteName': null,
+          'routeName': '/',
+        },
+      ),
+    );
 
     await tester.tap(find.text('/'));
     await tester.pump();
@@ -180,14 +186,15 @@ void main() {
 
     expect(log, hasLength(2));
     expect(
-        log.last,
-        isMethodCall(
-          'routeUpdated',
-          arguments: <String, dynamic>{
-            'previousRouteName': '/',
-            'routeName': '/A',
-          },
-        ));
+      log.last,
+      isMethodCall(
+        'routeUpdated',
+        arguments: <String, dynamic>{
+          'previousRouteName': '/',
+          'routeName': '/A',
+        },
+      ),
+    );
 
     await tester.tap(find.text('A'));
     await tester.pump();
@@ -195,19 +202,20 @@ void main() {
 
     expect(log, hasLength(3));
     expect(
-        log.last,
-        isMethodCall(
-          'routeUpdated',
-          arguments: <String, dynamic>{
-            'previousRouteName': '/A',
-            'routeName': '/B',
-          },
-        ));
+      log.last,
+      isMethodCall(
+        'routeUpdated',
+        arguments: <String, dynamic>{
+          'previousRouteName': '/A',
+          'routeName': '/B',
+        },
+      ),
+    );
   });
 
   testWidgets('Nameless routes should send platform messages', (WidgetTester tester) async {
     final List<MethodCall> log = <MethodCall>[];
-    SystemChannels.navigation.setMockMethodCallHandler((MethodCall methodCall) async {
+    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(SystemChannels.navigation, (MethodCall methodCall) async {
       log.add(methodCall);
     });
 
@@ -254,7 +262,7 @@ void main() {
 
   testWidgets('PlatformRouteInformationProvider reports URL', (WidgetTester tester) async {
     final List<MethodCall> log = <MethodCall>[];
-    SystemChannels.navigation.setMockMethodCallHandler((MethodCall methodCall) async {
+    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(SystemChannels.navigation, (MethodCall methodCall) async {
       log.add(methodCall);
     });
 
@@ -267,7 +275,7 @@ void main() {
       reportConfiguration: true,
       builder: (BuildContext context, RouteInformation information) {
         return Text(information.location!);
-      }
+      },
     );
 
     await tester.pumpWidget(MaterialApp.router(

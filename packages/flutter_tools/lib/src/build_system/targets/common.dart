@@ -12,11 +12,12 @@ import '../../base/file_system.dart';
 import '../../build_info.dart';
 import '../../compile.dart';
 import '../../dart/package_map.dart';
-import '../../globals.dart' as globals hide fs, processManager, artifacts, logger;
+import '../../globals.dart' as globals show xcode;
 import '../build_system.dart';
 import '../depfile.dart';
 import '../exceptions.dart';
 import 'assets.dart';
+import 'dart_plugin_registrant.dart';
 import 'icon_tree_shaker.dart';
 import 'localizations.dart';
 
@@ -45,9 +46,9 @@ const String kExtraFrontEndOptions = 'ExtraFrontEndOptions';
 /// This is expected to be a comma separated list of strings.
 const String kExtraGenSnapshotOptions = 'ExtraGenSnapshotOptions';
 
-/// Whether the app should run gen_snapshot as a split aot build for deferred
+/// Whether the build should run gen_snapshot as a split aot build for deferred
 /// components.
-const String kSplitAot = 'SplitAot';
+const String kDeferredComponents = 'DeferredComponents';
 
 /// Whether to strip source code information out of release builds and where to save it.
 const String kSplitDebugInfo = 'SplitDebugInfo';
@@ -65,11 +66,19 @@ const String kFileSystemRoots = 'FileSystemRoots';
 
 /// The define to control what iOS architectures are built for.
 ///
-/// This is expected to be a comma-separated list of architectures. If not
+/// This is expected to be a space-delimited list of architectures. If not
 /// provided, defaults to arm64.
 ///
 /// The other supported value is armv7, the 32-bit iOS architecture.
 const String kIosArchs = 'IosArchs';
+
+/// The define to control what macOS architectures are built for.
+///
+/// This is expected to be a space-delimited list of architectures. If not
+/// provided, defautls to x86_64.
+///
+/// Supported values are x86_64 and arm64.
+const String kDarwinArchs = 'DarwinArchs';
 
 /// Path to the SDK root to be used as the isysroot.
 const String kSdkRoot = 'SdkRoot';
@@ -79,6 +88,12 @@ const String kDartObfuscation = 'DartObfuscation';
 
 /// An output directory where one or more code-size measurements may be written.
 const String kCodeSizeDirectory = 'CodeSizeDirectory';
+
+/// SHA identifier of the Apple developer code signing identity.
+///
+/// Same as EXPANDED_CODE_SIGN_IDENTITY Xcode build setting.
+/// Also discoverable via `security find-identity -p codesigning`.
+const String kCodesignIdentity = 'CodesignIdentity';
 
 /// Copies the pre-built flutter bundle.
 // This is a one-off rule for implementing build bundle in terms of assemble.
@@ -131,6 +146,7 @@ class CopyFlutterBundle extends Target {
       environment,
       environment.outputDir,
       targetPlatform: TargetPlatform.android,
+      buildMode: buildMode,
     );
     final DepfileService depfileService = DepfileService(
       fileSystem: environment.fileSystem,
@@ -187,7 +203,7 @@ class KernelSnapshot extends Target {
     Source.pattern('{PROJECT_DIR}/.dart_tool/package_config_subset'),
     Source.pattern('{FLUTTER_ROOT}/packages/flutter_tools/lib/src/build_system/targets/common.dart'),
     Source.artifact(Artifact.platformKernelDill),
-    Source.artifact(Artifact.engineDartBinary),
+    Source.hostArtifact(HostArtifact.engineDartBinary),
     Source.artifact(Artifact.frontendServerSnapshotForEngineDartSdk),
   ];
 
@@ -202,6 +218,7 @@ class KernelSnapshot extends Target {
   @override
   List<Target> get dependencies => const <Target>[
     GenerateLocalizationsTarget(),
+    DartPluginRegistrantTarget(),
   ];
 
   @override
@@ -245,7 +262,7 @@ class KernelSnapshot extends Target {
     // See https://github.com/flutter/flutter/issues/44724
     bool forceLinkPlatform;
     switch (targetPlatform) {
-      case TargetPlatform.darwin_x64:
+      case TargetPlatform.darwin:
       case TargetPlatform.windows_x64:
       case TargetPlatform.linux_x64:
         forceLinkPlatform = true;
@@ -280,7 +297,7 @@ class KernelSnapshot extends Target {
       dartDefines: decodeDartDefines(environment.defines, kDartDefines),
       packageConfig: packageConfig,
       buildDir: environment.buildDir,
-      generateDartPluginRegistry: environment.generateDartPluginRegistry,
+      checkDartPluginRegistry: environment.generateDartPluginRegistry,
     );
     if (output == null || output.errorCount != 0) {
       throw Exception();
@@ -357,7 +374,7 @@ class AotElfProfile extends AotElfBase {
   List<Source> get inputs => <Source>[
     const Source.pattern('{FLUTTER_ROOT}/packages/flutter_tools/lib/src/build_system/targets/common.dart'),
     const Source.pattern('{BUILD_DIR}/app.dill'),
-    const Source.artifact(Artifact.engineDartBinary),
+    const Source.hostArtifact(HostArtifact.engineDartBinary),
     const Source.artifact(Artifact.skyEnginePath),
     Source.artifact(Artifact.genSnapshot,
       platform: targetPlatform,
@@ -389,7 +406,7 @@ class AotElfRelease extends AotElfBase {
   List<Source> get inputs => <Source>[
     const Source.pattern('{FLUTTER_ROOT}/packages/flutter_tools/lib/src/build_system/targets/common.dart'),
     const Source.pattern('{BUILD_DIR}/app.dill'),
-    const Source.artifact(Artifact.engineDartBinary),
+    const Source.hostArtifact(HostArtifact.engineDartBinary),
     const Source.artifact(Artifact.skyEnginePath),
     Source.artifact(Artifact.genSnapshot,
       platform: targetPlatform,

@@ -17,14 +17,14 @@ import 'package:flutter_tools/src/base/platform.dart';
 import 'package:flutter_tools/src/cache.dart';
 import 'package:flutter_tools/src/commands/packages.dart';
 import 'package:flutter_tools/src/dart/pub.dart';
+import 'package:flutter_tools/src/globals_null_migrated.dart' as globals;
 import 'package:flutter_tools/src/reporting/reporting.dart';
-import 'package:process/process.dart';
-import 'package:flutter_tools/src/globals.dart' as globals;
 
 import '../../src/common.dart';
 import '../../src/context.dart';
+import '../../src/fake_process_manager.dart';
 import '../../src/fakes.dart';
-import '../../src/testbed.dart';
+import '../../src/test_flutter_command_runner.dart';
 
 void main() {
   Cache.disableLocking();
@@ -444,7 +444,7 @@ void main() {
     FakeStdio mockStdio;
 
     setUp(() {
-      processManager = FakeProcessManager.list(<FakeCommand>[]);
+      processManager = FakeProcessManager.empty();
       mockStdio = FakeStdio()..stdout.terminalColumns = 80;
     });
 
@@ -456,7 +456,7 @@ void main() {
       );
       await createTestCommandRunner(PackagesCommand()).run(<String>['packages', 'test']);
 
-      expect(processManager.hasRemainingExpectations, false);
+      expect(processManager, hasNoRemainingExpectations);
     }, overrides: <Type, Generator>{
       FileSystem: () => MemoryFileSystem.test(),
       Platform: () => FakePlatform(operatingSystem: 'linux', environment: <String, String>{}),
@@ -481,7 +481,7 @@ void main() {
       );
       await createTestCommandRunner(PackagesCommand()).run(<String>['packages', 'test']);
 
-      expect(processManager.hasRemainingExpectations, false);
+      expect(processManager, hasNoRemainingExpectations);
     }, overrides: <Type, Generator>{
       FileSystem: () => MemoryFileSystem.test(),
       Platform: () => FakePlatform(operatingSystem: 'linux', environment: <String, String>{}),
@@ -510,7 +510,33 @@ void main() {
       );
       await createTestCommandRunner(PackagesCommand()).run(<String>['packages', '--verbose', 'pub', 'run', '--foo', 'bar']);
 
-      expect(processManager.hasRemainingExpectations, false);
+      expect(processManager, hasNoRemainingExpectations);
+    }, overrides: <Type, Generator>{
+      FileSystem: () => MemoryFileSystem.test(),
+      Platform: () => FakePlatform(operatingSystem: 'linux', environment: <String, String>{}),
+      ProcessManager: () => processManager,
+      Stdio: () => mockStdio,
+      Pub: () => Pub(
+        fileSystem: globals.fs,
+        logger: globals.logger,
+        processManager: globals.processManager,
+        usage: globals.flutterUsage,
+        botDetector: globals.botDetector,
+        platform: globals.platform,
+      ),
+    });
+
+    testUsingContext('upgrade does not check for pubspec.yaml if -h/--help is passed', () async {
+      Cache.flutterRoot = '';
+      processManager.addCommand(
+        FakeCommand(command: const <String>[
+          '/bin/cache/dart-sdk/bin/pub', 'upgrade', '-h'],
+          stdin:  IOSink(StreamController<List<int>>().sink),
+        ),
+      );
+      await createTestCommandRunner(PackagesCommand()).run(<String>['pub', 'upgrade', '-h']);
+
+      expect(processManager, hasNoRemainingExpectations);
     }, overrides: <Type, Generator>{
       FileSystem: () => MemoryFileSystem.test(),
       Platform: () => FakePlatform(operatingSystem: 'linux', environment: <String, String>{}),

@@ -53,6 +53,8 @@ abstract class FlutterTestRunner {
     bool runSkipped = false,
     int shardIndex,
     int totalShards,
+    Device integrationTestDevice,
+    String integrationTestUserIdentifier,
   });
 }
 
@@ -87,6 +89,8 @@ class _FlutterTestRunnerImpl implements FlutterTestRunner {
     bool runSkipped = false,
     int shardIndex,
     int totalShards,
+    Device integrationTestDevice,
+    String integrationTestUserIdentifier,
   }) async {
     // Configure package:test to use the Flutter engine for child processes.
     final String shellPath = globals.artifacts.getArtifactPath(Artifact.flutterTester);
@@ -164,6 +168,7 @@ class _FlutterTestRunnerImpl implements FlutterTestRunner {
             logger: globals.logger,
             fileSystem: globals.fs,
             artifacts: globals.artifacts,
+            processManager: globals.processManager,
             chromiumLauncher: ChromiumLauncher(
               fileSystem: globals.fs,
               platform: globals.platform,
@@ -201,6 +206,8 @@ class _FlutterTestRunnerImpl implements FlutterTestRunner {
       projectRootDirectory: globals.fs.currentDirectory.uri,
       flutterProject: flutterProject,
       icudtlPath: icudtlPath,
+      integrationTestDevice: integrationTestDevice,
+      integrationTestUserIdentifier: integrationTestUserIdentifier,
     );
 
     try {

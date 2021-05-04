@@ -2,9 +2,9 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/widgets.dart';
+import 'package:flutter_test/flutter_test.dart';
 
 import '../rendering/mock_canvas.dart';
 import '../rendering/rendering_tester.dart';
@@ -784,8 +784,7 @@ void main() {
     });
 
     testWidgets('offAxisFraction, magnification changes matrix', (WidgetTester tester) async {
-      final ScrollController controller = ScrollController(
-          initialScrollOffset: 200.0);
+      final ScrollController controller = ScrollController(initialScrollOffset: 200.0);
 
       await tester.pumpWidget(
         Directionality(
@@ -807,27 +806,30 @@ void main() {
       );
 
       final RenderListWheelViewport viewport = tester.renderObject(find.byType(ListWheelViewport)) as RenderListWheelViewport;
-      expect(viewport, paints
-        ..transform(
-          matrix4: equals(<dynamic>[
-            1.0,
-            0.0,
-            0.0,
-            0.0,
-            0.0,
-            moreOrLessEquals(0.6318744917928063),
-            moreOrLessEquals(0.3420201433256688),
-            moreOrLessEquals(-0.0010260604299770066),
-            0.0,
-            moreOrLessEquals(-1.1877435020329863),
-            moreOrLessEquals(0.9396926207859083),
-            moreOrLessEquals(-0.002819077862357725),
-            0.0,
-            moreOrLessEquals(-62.20844875763376),
-            moreOrLessEquals(-138.79047052615562),
-            moreOrLessEquals(1.4163714115784667),
-          ]),
-        ));
+      expect(
+        viewport,
+        paints
+          ..transform(
+            matrix4: equals(<dynamic>[
+              1.0,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              moreOrLessEquals(0.6318744917928063),
+              moreOrLessEquals(0.3420201433256688),
+              moreOrLessEquals(-0.0010260604299770066),
+              0.0,
+              moreOrLessEquals(-1.1877435020329863),
+              moreOrLessEquals(0.9396926207859083),
+              moreOrLessEquals(-0.002819077862357725),
+              0.0,
+              moreOrLessEquals(-62.20844875763376),
+              moreOrLessEquals(-138.79047052615562),
+              moreOrLessEquals(1.4163714115784667),
+            ]),
+          ),
+      );
 
       controller.jumpTo(0.0);
 
@@ -852,35 +854,37 @@ void main() {
         ),
       );
 
-      expect(viewport, paints
-        ..transform(
-          matrix4: equals(<dynamic>[
-            1.5,
-            0.0,
-            0.0,
-            0.0,
-            0.0,
-            1.5,
-            0.0,
-            0.0,
-            0.0,
-            0.0,
-            1.5,
-            0.0,
-            0.0,
-            -150.0,
-            0.0,
-            1.0,
-          ]),
-        ));
-
+      expect(
+        viewport,
+        paints
+          ..transform(
+            matrix4: equals(<dynamic>[
+              1.5,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              1.5,
+              0.0,
+              0.0,
+              0.0,
+              0.0,
+              1.5,
+              0.0,
+              0.0,
+              -150.0,
+              0.0,
+              1.0,
+            ]),
+          ),
+      );
     });
   });
 
   group('scroll notifications', () {
     testWidgets('no onSelectedItemChanged callback on first build', (WidgetTester tester) async {
       bool itemChangeCalled = false;
-      final ValueChanged<int> onItemChange = (_) { itemChangeCalled = true; };
+      void onItemChange(int _) { itemChangeCalled = true; }
 
       await tester.pumpWidget(
         Directionality(
@@ -1195,7 +1199,7 @@ void main() {
       await tester.fling(
         find.byType(ListWheelScrollView),
         const Offset(0.0, -50.0),
-        800.0,
+        100.0,
       );
 
       // At this moment, the ballistics is started but 50px is still inside the
@@ -1282,13 +1286,11 @@ void main() {
               controller: ScrollController(initialScrollOffset: 300.0),
               itemExtent: 100.0,
               children: outerChildren = List<Widget>.generate(10, (int i) {
-                return Container(
-                  child: Center(
-                    child: innerChildren[i] = SizedBox(
-                      height: 50.0,
-                      width: 50.0,
-                      child: Text('Item $i'),
-                    ),
+                return Center(
+                  child: innerChildren[i] = SizedBox(
+                    height: 50.0,
+                    width: 50.0,
+                    child: Text('Item $i'),
                   ),
                 );
               }),
@@ -1354,13 +1356,11 @@ void main() {
               itemExtent: 100.0,
               children:
               outerChildren = List<Widget>.generate(10, (int i) {
-                return Container(
-                  child: Center(
-                    child: innerChildren[i] = SizedBox(
-                      height: 50.0,
-                      width: 50.0,
-                      child: Text('Item $i'),
-                    ),
+                return Center(
+                  child: innerChildren[i] = SizedBox(
+                    height: 50.0,
+                    width: 50.0,
+                    child: Text('Item $i'),
                   ),
                 );
               }),

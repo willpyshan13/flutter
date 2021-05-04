@@ -293,7 +293,7 @@ void main() {
                     title: TestText('title', key: titleKey),
                     subtitle: TestText('subtitle', key: subtitleKey),
                   );
-                }
+                },
               ),
             ),
           ),
@@ -1284,10 +1284,12 @@ void main() {
       paints
         ..rect(
             color: Colors.orange[500],
-            rect: const Rect.fromLTRB(350.0, 250.0, 450.0, 350.0))
+            rect: const Rect.fromLTRB(350.0, 250.0, 450.0, 350.0),
+          )
         ..rect(
             color: const Color(0xffffffff),
-            rect: const Rect.fromLTRB(350.0, 250.0, 450.0, 350.0)),
+            rect: const Rect.fromLTRB(350.0, 250.0, 450.0, 350.0),
+          ),
     );
 
     // Check when the list tile is disabled.
@@ -1299,7 +1301,8 @@ void main() {
       paints
         ..rect(
             color: const Color(0xffffffff),
-            rect: const Rect.fromLTRB(350.0, 250.0, 450.0, 350.0)),
+            rect: const Rect.fromLTRB(350.0, 250.0, 450.0, 350.0),
+          ),
     );
   });
 
@@ -1334,10 +1337,12 @@ void main() {
       paints
         ..rect(
             color: const Color(0x1f000000),
-            rect: const Rect.fromLTRB(350.0, 250.0, 450.0, 350.0))
+            rect: const Rect.fromLTRB(350.0, 250.0, 450.0, 350.0),
+          )
         ..rect(
             color: const Color(0xffffffff),
-            rect: const Rect.fromLTRB(350.0, 250.0, 450.0, 350.0)),
+            rect: const Rect.fromLTRB(350.0, 250.0, 450.0, 350.0),
+          ),
     );
 
     // Start hovering
@@ -1353,13 +1358,16 @@ void main() {
       paints
         ..rect(
             color: const Color(0x1f000000),
-            rect: const Rect.fromLTRB(350.0, 250.0, 450.0, 350.0))
+            rect: const Rect.fromLTRB(350.0, 250.0, 450.0, 350.0),
+          )
         ..rect(
             color: Colors.orange[500],
-            rect: const Rect.fromLTRB(350.0, 250.0, 450.0, 350.0))
+            rect: const Rect.fromLTRB(350.0, 250.0, 450.0, 350.0),
+          )
         ..rect(
             color: const Color(0xffffffff),
-            rect: const Rect.fromLTRB(350.0, 250.0, 450.0, 350.0)),
+            rect: const Rect.fromLTRB(350.0, 250.0, 450.0, 350.0),
+          ),
     );
 
     await tester.pumpWidget(buildApp(enabled: false));
@@ -1370,10 +1378,12 @@ void main() {
       paints
         ..rect(
             color: Colors.orange[500],
-            rect: const Rect.fromLTRB(350.0, 250.0, 450.0, 350.0))
+            rect: const Rect.fromLTRB(350.0, 250.0, 450.0, 350.0),
+          )
         ..rect(
             color: const Color(0xffffffff),
-            rect: const Rect.fromLTRB(350.0, 250.0, 450.0, 350.0)),
+            rect: const Rect.fromLTRB(350.0, 250.0, 450.0, 350.0),
+          ),
     );
   });
 
@@ -1419,7 +1429,7 @@ void main() {
   testWidgets('ListTile responds to density changes.', (WidgetTester tester) async {
     const Key key = Key('test');
     Future<void> buildTest(VisualDensity visualDensity) async {
-      return await tester.pumpWidget(
+      return tester.pumpWidget(
         MaterialApp(
           home: Material(
             child: Center(
@@ -2024,7 +2034,7 @@ void main() {
   testWidgets('ListTile horizontalTitleGap with visualDensity', (WidgetTester tester) async {
     Widget buildFrame({
       double? horizontalTitleGap,
-      VisualDensity? visualDensity
+      VisualDensity? visualDensity,
     }) {
       return MediaQuery(
         data: const MediaQueryData(
@@ -2283,5 +2293,54 @@ void main() {
     // Disabled color should be ThemeData.disabledColor.
     expect(textColor(leadingKey), theme.disabledColor);
     expect(textColor(trailingKey), theme.disabledColor);
+  });
+
+  testWidgets('selected, enabled ListTile default icon color, light and dark themes', (WidgetTester tester) async {
+    // Regression test for https://github.com/flutter/flutter/pull/77004
+
+    const ColorScheme lightColorScheme = ColorScheme.light();
+    const ColorScheme darkColorScheme = ColorScheme.dark();
+    final Key leadingKey = UniqueKey();
+    final Key trailingKey = UniqueKey();
+
+    Widget buildFrame({ required Brightness brightness, required bool selected }) {
+      final ThemeData theme = brightness == Brightness.light
+        ? ThemeData.from(colorScheme: const ColorScheme.light())
+        : ThemeData.from(colorScheme: const ColorScheme.dark());
+      return MaterialApp(
+        theme: theme,
+        home: Material(
+          child: Center(
+            child: ListTile(
+              enabled: true,
+              selected: selected,
+              leading: TestIcon(key: leadingKey),
+              trailing: TestIcon(key: trailingKey),
+            ),
+          ),
+        ),
+      );
+    }
+
+    Color iconColor(Key key) => tester.state<TestIconState>(find.byKey(key)).iconTheme.color!;
+
+    await tester.pumpWidget(buildFrame(brightness: Brightness.light, selected: true));
+    expect(iconColor(leadingKey), lightColorScheme.primary);
+    expect(iconColor(trailingKey), lightColorScheme.primary);
+
+    await tester.pumpWidget(buildFrame(brightness: Brightness.light, selected: false));
+    expect(iconColor(leadingKey), Colors.black45);
+    expect(iconColor(trailingKey), Colors.black45);
+
+    await tester.pumpWidget(buildFrame(brightness: Brightness.dark, selected: true));
+    await tester.pumpAndSettle(); // Animated theme change
+    expect(iconColor(leadingKey), darkColorScheme.primary);
+    expect(iconColor(trailingKey), darkColorScheme.primary);
+
+    // For this configuration, ListTile defers to the default IconTheme.
+    // The default dark theme's IconTheme has color:white
+    await tester.pumpWidget(buildFrame(brightness: Brightness.dark, selected: false));
+    expect(iconColor(leadingKey),  Colors.white);
+    expect(iconColor(trailingKey), Colors.white);
   });
 }

@@ -19,6 +19,7 @@ import  '../build_info.dart';
 import '../commands/daemon.dart';
 import '../compile.dart';
 import '../device.dart';
+import '../device_port_forwarder.dart';
 import '../fuchsia/fuchsia_device.dart';
 import '../globals.dart' as globals;
 import '../ios/devices.dart';
@@ -38,7 +39,7 @@ import '../vmservice.dart';
 /// With an application already running, a HotRunner can be attached to it
 /// with:
 /// ```
-/// $ flutter attach --debug-uri http://127.0.0.1:12345/QqL7EFEDNG0=/
+/// $ flutter attach --debug-url http://127.0.0.1:12345/QqL7EFEDNG0=/
 /// ```
 ///
 /// If `--disable-service-auth-codes` was provided to the application at startup
@@ -76,9 +77,10 @@ class AttachCommand extends FlutterCommand {
         help: '(deprecated) Device port where the observatory is listening. Requires '
               '"--disable-service-auth-codes" to also be provided to the Flutter '
               'application at launch, otherwise this command will fail to connect to '
-              'the application. In general, "--debug-uri" should be used instead.',
+              'the application. In general, "--debug-url" should be used instead.',
       )..addOption(
-        'debug-uri', // TODO(ianh): we should support --debug-url as well (leaving this as an alias).
+        'debug-url',
+        aliases: <String>[ 'debug-uri' ], // supported for historical reasons
         help: 'The URL at which the observatory is listening.',
       )..addOption(
         'app-id',
@@ -149,19 +151,18 @@ known, it can be explicitly provided to attach via the command-line, e.g.
     } on Exception catch (error) {
       throwToolExit('Invalid port for `--debug-port`: $error');
     }
-    return null;
   }
 
   Uri get debugUri {
-    if (argResults['debug-uri'] == null) {
+    if (argResults['debug-url'] == null) {
       return null;
     }
-    final Uri uri = Uri.tryParse(stringArg('debug-uri'));
+    final Uri uri = Uri.tryParse(stringArg('debug-url'));
     if (uri == null) {
-      throwToolExit('Invalid `--debug-uri`: ${stringArg('debug-uri')}');
+      throwToolExit('Invalid `--debug-url`: ${stringArg('debug-url')}');
     }
     if (!uri.hasPort) {
-      throwToolExit('Port not specified for `--debug-uri`: $uri');
+      throwToolExit('Port not specified for `--debug-url`: $uri');
     }
     return uri;
   }
@@ -181,13 +182,13 @@ known, it can be explicitly provided to attach via the command-line, e.g.
     debugPort;
     if (debugPort == null && debugUri == null && argResults.wasParsed(FlutterCommand.ipv6Flag)) {
       throwToolExit(
-        'When the --debug-port or --debug-uri is unknown, this command determines '
+        'When the --debug-port or --debug-url is unknown, this command determines '
         'the value of --ipv6 on its own.',
       );
     }
     if (debugPort == null && debugUri == null && argResults.wasParsed(FlutterCommand.observatoryPortOption)) {
       throwToolExit(
-        'When the --debug-port or --debug-uri is unknown, this command does not use '
+        'When the --debug-port or --debug-url is unknown, this command does not use '
         'the value of --observatory-port.',
       );
     }
@@ -296,6 +297,7 @@ known, it can be explicitly provided to attach via the command-line, e.g.
             ipv6: ipv6,
             devicePort: deviceVmservicePort,
             hostPort: hostVmservicePort,
+            logger: globals.logger,
           );
         globals.printStatus('Waiting for a connection from Flutter on ${device.name}...');
         observatoryUri = observatoryDiscovery.uris;
@@ -368,7 +370,7 @@ known, it can be explicitly provided to attach via the command-line, e.g.
             logger: globals.logger,
             terminal: globals.terminal,
             signals: globals.signals,
-            processInfo: processInfo,
+            processInfo: globals.processInfo,
             reportReady: boolArg('report-ready'),
             pidFile: stringArg('pid-file'),
           )
@@ -429,7 +431,7 @@ known, it can be explicitly provided to attach via the command-line, e.g.
     final List<FlutterDevice> flutterDevices =  <FlutterDevice>[flutterDevice];
     final DebuggingOptions debuggingOptions = DebuggingOptions.enabled(
       buildInfo,
-      disableDds: boolArg('disable-dds'),
+      enableDds: enableDds,
       devToolsServerAddress: devToolsServerAddress,
     );
 

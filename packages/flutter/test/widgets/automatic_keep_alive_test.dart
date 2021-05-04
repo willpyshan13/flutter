@@ -2,10 +2,10 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+import 'package:flutter/gestures.dart' show DragStartBehavior;
 import 'package:flutter/rendering.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:flutter/gestures.dart' show DragStartBehavior;
 
 class Leaf extends StatefulWidget {
   const Leaf({ required Key key, required this.child }) : super(key: key);
@@ -175,7 +175,7 @@ void tests({ required bool impliedMode }) {
           childAspectRatio: 400.0 / 24.6, // about 50 widgets visible
           cacheExtent: 0.0,
           children: generateList(
-            Container(child: const Placeholder()),
+            const Placeholder(),
             impliedMode: impliedMode,
           ),
         ),
@@ -446,8 +446,7 @@ void main() {
           AutomaticKeepAlive(
             child: SizedBox(
               height: 400.0,
-              child: Stack(children: const <Widget>[
-              ]),
+              child: Stack(children: const <Widget>[]),
             ),
           ),
           AutomaticKeepAlive(
@@ -598,7 +597,7 @@ class AlwaysKeepAliveRenderBoxState extends State<_AlwaysKeepAlive> with Automat
   }
 }
 
-abstract class KeepAliveParentDataMixinAlt implements KeepAliveParentDataMixin {
+mixin KeepAliveParentDataMixinAlt implements KeepAliveParentDataMixin {
   @override
   bool keptAlive = false;
 

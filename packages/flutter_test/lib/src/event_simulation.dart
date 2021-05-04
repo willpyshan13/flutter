@@ -2,16 +2,26 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/services.dart';
+
+import 'binding.dart';
 import 'test_async_utils.dart';
 
 // TODO(gspencergoog): Replace this with more robust key simulation code once
 // the new key event code is in.
 // https://github.com/flutter/flutter/issues/33521
 // This code can only simulate keys which appear in the key maps.
+
+String _keyLabel(LogicalKeyboardKey key) {
+  final String keyLabel = key.keyLabel;
+  if (keyLabel.length == 1)
+    return keyLabel.toLowerCase();
+  return '';
+}
 
 /// A class that serves as a namespace for a bunch of keyboard-key generation
 /// utilities.
@@ -206,7 +216,7 @@ class KeyEventSimulator {
 
     if (kIsWeb) {
       result['code'] = _getWebKeyCode(key);
-      result['key'] = key.keyLabel;
+      result['key'] = _keyLabel(key);
       result['metaState'] = _getWebModifierFlags(key, isDown);
       return result;
     }
@@ -214,17 +224,17 @@ class KeyEventSimulator {
     switch (platform) {
       case 'android':
         result['keyCode'] = keyCode;
-        if (key.keyLabel.isNotEmpty) {
-          result['codePoint'] = key.keyLabel.codeUnitAt(0);
-          result['character'] = key.keyLabel;
+        if (_keyLabel(key).isNotEmpty) {
+          result['codePoint'] = _keyLabel(key).codeUnitAt(0);
+          result['character'] = _keyLabel(key);
         }
         result['scanCode'] = scanCode;
         result['metaState'] = _getAndroidModifierFlags(key, isDown);
         break;
       case 'fuchsia':
         result['hidUsage'] = physicalKey.usbHidUsage;
-        if (key.keyLabel.isNotEmpty) {
-          result['codePoint'] = key.keyLabel.codeUnitAt(0);
+        if (_keyLabel(key).isNotEmpty) {
+          result['codePoint'] = _keyLabel(key).codeUnitAt(0);
         }
         result['modifiers'] = _getFuchsiaModifierFlags(key, isDown);
         break;
@@ -233,32 +243,32 @@ class KeyEventSimulator {
         result['keyCode'] = keyCode;
         result['scanCode'] = scanCode;
         result['modifiers'] = _getGlfwModifierFlags(key, isDown);
-        result['unicodeScalarValues'] = key.keyLabel.isNotEmpty ? key.keyLabel.codeUnitAt(0) : 0;
+        result['unicodeScalarValues'] = _keyLabel(key).isNotEmpty ? _keyLabel(key).codeUnitAt(0) : 0;
         break;
       case 'macos':
         result['keyCode'] = scanCode;
-        if (key.keyLabel.isNotEmpty) {
-          result['characters'] = key.keyLabel;
-          result['charactersIgnoringModifiers'] = key.keyLabel;
+        if (_keyLabel(key).isNotEmpty) {
+          result['characters'] = _keyLabel(key);
+          result['charactersIgnoringModifiers'] = _keyLabel(key);
         }
         result['modifiers'] = _getMacOsModifierFlags(key, isDown);
         break;
       case 'ios':
         result['keyCode'] = scanCode;
-        result['characters'] = key.keyLabel;
-        result['charactersIgnoringModifiers'] = key.keyLabel;
+        result['characters'] = _keyLabel(key);
+        result['charactersIgnoringModifiers'] = _keyLabel(key);
         result['modifiers'] = _getIOSModifierFlags(key, isDown);
         break;
       case 'web':
         result['code'] = _getWebKeyCode(key);
-        result['key'] = key.keyLabel;
+        result['key'] = _keyLabel(key);
         result['metaState'] = _getWebModifierFlags(key, isDown);
         break;
       case 'windows':
         result['keyCode'] = keyCode;
         result['scanCode'] = scanCode;
-        if (key.keyLabel.isNotEmpty) {
-          result['characterCodePoint'] = key.keyLabel.codeUnitAt(0);
+        if (_keyLabel(key).isNotEmpty) {
+          result['characterCodePoint'] = _keyLabel(key).codeUnitAt(0);
         }
         result['modifiers'] = _getWindowsModifierFlags(key, isDown);
     }
@@ -625,26 +635,25 @@ class KeyEventSimulator {
   ///
   ///  - [simulateKeyUpEvent] to simulate the corresponding key up event.
   static Future<bool> simulateKeyDownEvent(LogicalKeyboardKey key, {String? platform, PhysicalKeyboardKey? physicalKey}) async {
-    return await TestAsyncUtils.guard<bool>(() async {
+    return TestAsyncUtils.guard<bool>(() async {
       platform ??= Platform.operatingSystem;
       assert(_osIsSupported(platform!), 'Platform $platform not supported for key simulation');
 
       final Map<String, dynamic> data = getKeyData(key, platform: platform!, isDown: true, physicalKey: physicalKey);
-      bool result = false;
-      await ServicesBinding.instance!.defaultBinaryMessenger.handlePlatformMessage(
+      final Completer<bool> result = Completer<bool>();
+      await TestDefaultBinaryMessengerBinding.instance!.defaultBinaryMessenger.handlePlatformMessage(
         SystemChannels.keyEvent.name,
         SystemChannels.keyEvent.codec.encodeMessage(data),
         (ByteData? data) {
           if (data == null) {
+            result.complete(false);
             return;
           }
           final Map<String, dynamic> decoded = SystemChannels.keyEvent.codec.decodeMessage(data) as Map<String, dynamic>;
-          if (decoded['handled'] as bool) {
-            result = true;
-          }
+          result.complete(decoded['handled'] as bool);
         }
       );
-      return result;
+      return result.future;
     });
   }
 
@@ -670,7 +679,7 @@ class KeyEventSimulator {
 
       final Map<String, dynamic> data = getKeyData(key, platform: platform!, isDown: false, physicalKey: physicalKey);
       bool result = false;
-      await ServicesBinding.instance!.defaultBinaryMessenger.handlePlatformMessage(
+      await TestDefaultBinaryMessengerBinding.instance!.defaultBinaryMessenger.handlePlatformMessage(
         SystemChannels.keyEvent.name,
         SystemChannels.keyEvent.codec.encodeMessage(data),
         (ByteData? data) {

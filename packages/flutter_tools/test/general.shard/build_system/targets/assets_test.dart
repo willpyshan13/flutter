@@ -23,10 +23,8 @@ import '../../../src/context.dart';
 void main() {
   Environment environment;
   FileSystem fileSystem;
-  Platform platform;
 
   setUp(() {
-    platform = FakePlatform();
     fileSystem = MemoryFileSystem.test();
     environment = Environment.test(
       fileSystem.currentDirectory,
@@ -34,6 +32,7 @@ void main() {
       artifacts: Artifacts.test(),
       fileSystem: fileSystem,
       logger: BufferLogger.test(),
+      platform: FakePlatform(),
     );
     fileSystem.file(environment.buildDir.childFile('app.dill')).createSync(recursive: true);
     fileSystem.file('packages/flutter_tools/lib/src/build_system/targets/assets.dart')
@@ -82,7 +81,6 @@ flutter:
   }, overrides: <Type, Generator>{
     FileSystem: () => fileSystem,
     ProcessManager: () => FakeProcessManager.any(),
-    Platform: () => platform,
   });
 
   testUsingContext('Copies files to correct asset directory', () async {
@@ -90,7 +88,7 @@ flutter:
 
     expect(fileSystem.file('${environment.buildDir.path}/flutter_assets/AssetManifest.json'), exists);
     expect(fileSystem.file('${environment.buildDir.path}/flutter_assets/FontManifest.json'), exists);
-    expect(fileSystem.file('${environment.buildDir.path}/flutter_assets/NOTICES'), exists);
+    expect(fileSystem.file('${environment.buildDir.path}/flutter_assets/NOTICES.Z'), exists);
     // See https://github.com/flutter/flutter/issues/35293
     expect(fileSystem.file('${environment.buildDir.path}/flutter_assets/assets/foo/bar.png'), exists);
     // See https://github.com/flutter/flutter/issues/46163
@@ -98,7 +96,6 @@ flutter:
   }, overrides: <Type, Generator>{
     FileSystem: () => fileSystem,
     ProcessManager: () => FakeProcessManager.any(),
-    Platform: () => platform,
   });
 
   testUsingContext('Throws exception if pubspec contains missing files', () async {
@@ -113,12 +110,11 @@ flutter:
 
 ''');
 
-    expect(() async => await const CopyAssets().build(environment),
+    expect(() async => const CopyAssets().build(environment),
       throwsA(isA<Exception>()));
   }, overrides: <Type, Generator>{
     FileSystem: () => fileSystem,
     ProcessManager: () => FakeProcessManager.any(),
-    Platform: () => platform,
   });
 
   testWithoutContext('processSkSLBundle returns null if there is no path '

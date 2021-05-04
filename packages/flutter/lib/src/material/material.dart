@@ -310,6 +310,8 @@ class Material extends StatefulWidget {
   /// ```dart
   /// MaterialInkController inkController = Material.of(context);
   /// ```
+  ///
+  /// This method can be expensive (it walks the element tree).
   static MaterialInkController? of(BuildContext context) {
     return context.findAncestorRenderObjectOfType<_RenderInkFeatures>();
   }
@@ -363,7 +365,7 @@ class _MaterialState extends State<Material> with TickerProviderStateMixin {
       'If Material type is not MaterialType.transparency, a color must '
       'either be passed in through the `color` property, or be defined '
       'in the theme (ex. canvasColor != null if type is set to '
-      'MaterialType.canvas)'
+      'MaterialType.canvas)',
     );
     Widget? contents = widget.child;
     if (contents != null) {
@@ -626,8 +628,7 @@ abstract class InkFeature {
       return true;
     }());
     _controller._removeFeature(this);
-    if (onRemoved != null)
-      onRemoved!();
+    onRemoved?.call();
   }
 
   void _paint(Canvas canvas) {

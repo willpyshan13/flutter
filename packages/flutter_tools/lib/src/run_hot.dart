@@ -25,7 +25,7 @@ import 'dart/package_map.dart';
 import 'devfs.dart';
 import 'device.dart';
 import 'features.dart';
-import 'globals.dart' as globals;
+import 'globals_null_migrated.dart' as globals;
 import 'project.dart';
 import 'reporting/reporting.dart';
 import 'resident_devtools_handler.dart';
@@ -165,8 +165,8 @@ class HotRunner extends ResidentRunner {
         final CompilerOutput compilerOutput =
             await device.generator.compileExpression(expression, definitions,
                 typeDefinitions, libraryUri, klass, isStatic);
-        if (compilerOutput != null && compilerOutput.outputFilename != null) {
-          return base64.encode(globals.fs.file(compilerOutput.outputFilename).readAsBytesSync());
+        if (compilerOutput != null && compilerOutput.expressionData != null) {
+          return base64.encode(compilerOutput.expressionData);
         }
       }
     }
@@ -315,15 +315,7 @@ class HotRunner extends ResidentRunner {
     bool enableDevTools = false,
     String route,
   }) async {
-    File mainFile = globals.fs.file(mainPath);
-    // `generated_main.dart` contains the Dart plugin registry.
-    final Directory buildDir = FlutterProject.current()
-        .directory
-        .childDirectory(globals.fs.path.join('.dart_tool', 'flutter_build'));
-    final File newMainDart = buildDir?.childFile('generated_main.dart');
-    if (newMainDart != null && newMainDart.existsSync()) {
-      mainFile = newMainDart;
-    }
+    final File mainFile = globals.fs.file(mainPath);
     firstBuildTime = DateTime.now();
 
     final List<Future<bool>> startupTasks = <Future<bool>>[];
@@ -348,6 +340,8 @@ class HotRunner extends ResidentRunner {
                 trackWidgetCreation: debuggingOptions.buildInfo.trackWidgetCreation,
               ),
             packageConfig: debuggingOptions.buildInfo.packageConfig,
+            projectRootPath: FlutterProject.current().directory.absolute.path,
+            fs: globals.fs,
           ).then((CompilerOutput output) => output?.errorCount == 0)
         );
       }
@@ -609,9 +603,6 @@ class HotRunner extends ResidentRunner {
   }
 
   @override
-  bool get supportsRestart => true;
-
-  @override
   Future<OperationResult> restart({
     bool fullRestart = false,
     String reason,
@@ -680,7 +671,7 @@ class HotRunner extends ResidentRunner {
     String reason,
     bool silent,
   }) async {
-    if (!canHotRestart) {
+    if (!supportsRestart) {
       return OperationResult(1, 'hotRestart not supported');
     }
     Status status;
@@ -1094,23 +1085,24 @@ class HotRunner extends ResidentRunner {
     return message.toString();
   }
 
-
   @override
   void printHelp({ @required bool details }) {
     globals.printStatus('Flutter run key commands.');
     commandHelp.r.print();
-    if (canHotRestart) {
+    if (supportsRestart) {
       commandHelp.R.print();
     }
-    commandHelp.h.print(); // TODO(ianh): print different message if "details" is false
+    if (details) {
+      printHelpDetails();
+      commandHelp.hWithDetails.print();
+    } else {
+      commandHelp.hWithoutDetails.print();
+    }
     if (_didAttach) {
       commandHelp.d.print();
     }
     commandHelp.c.print();
     commandHelp.q.print();
-    if (details) {
-      printHelpDetails();
-    }
     globals.printStatus('');
     if (debuggingOptions.buildInfo.nullSafetyMode ==  NullSafetyMode.sound) {
       globals.printStatus('💪 Running with sound null safety 💪', emphasis: true);
@@ -1176,6 +1168,7 @@ class HotRunner extends ResidentRunner {
       await flutterDevice.device.dispose();
     }
     await _cleanupDevFS();
+    await residentDevtoolsHandler.shutdown();
     await stopEchoingDeviceLog();
   }
 }

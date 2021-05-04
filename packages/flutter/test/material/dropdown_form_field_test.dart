@@ -5,13 +5,13 @@
 import 'dart:math' as math;
 import 'dart:ui' show window;
 
-import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_test/flutter_test.dart';
 
 import '../rendering/mock_canvas.dart';
 
 const List<String> menuItems = <String>['one', 'two', 'three', 'four'];
-final ValueChanged<String?> onChanged = (_) { };
+void onChanged<T>(T _) { }
 final Type dropdownButtonType = DropdownButton<String>(
   onChanged: (_) { },
   items: const <DropdownMenuItem<String>>[],
@@ -130,7 +130,7 @@ void verifyPaintedShadow(Finder customPaint, int elevation) {
   final List<RRect> rrects = List<RRect>.generate(3, (int index) {
     return RRect.fromRectAndRadius(
       originalRectangle.shift(
-        boxShadows[index].offset
+        boxShadows[index].offset,
       ).inflate(boxShadows[index].spreadRadius),
       const Radius.circular(2.0),
     );
@@ -160,7 +160,7 @@ void main() {
                 value: value,
                 hint: const Text('Select Value'),
                 decoration: const InputDecoration(
-                  prefixIcon: Icon(Icons.fastfood)
+                  prefixIcon: Icon(Icons.fastfood),
                 ),
                 items: menuItems.map((String value) {
                   return DropdownMenuItem<String>(

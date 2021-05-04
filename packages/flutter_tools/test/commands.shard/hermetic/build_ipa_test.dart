@@ -12,17 +12,16 @@ import 'package:flutter_tools/src/cache.dart';
 import 'package:flutter_tools/src/commands/build.dart';
 import 'package:flutter_tools/src/ios/xcodeproj.dart';
 import 'package:flutter_tools/src/reporting/reporting.dart';
-import 'package:process/process.dart';
 
 import '../../src/common.dart';
 import '../../src/context.dart';
-import '../../src/testbed.dart';
+import '../../src/test_flutter_command_runner.dart';
 
 class FakeXcodeProjectInterpreterWithBuildSettings extends FakeXcodeProjectInterpreter {
   @override
   Future<Map<String, String>> getBuildSettings(
       String projectPath, {
-        String scheme,
+        XcodeProjectBuildContext buildContext,
         Duration timeout = const Duration(minutes: 1),
       }) async {
     return <String, String>{
@@ -82,7 +81,7 @@ void main() {
 
   // Creates a FakeCommand for the xcodebuild call to build the app
   // in the given configuration.
-  FakeCommand setUpFakeXcodeBuildHandler({ bool verbose = false, bool showBuildSettings = false, void Function() onRun }) {
+  FakeCommand setUpFakeXcodeBuildHandler({ bool verbose = false, void Function() onRun }) {
     return FakeCommand(
       command: <String>[
         'xcrun',
@@ -99,8 +98,6 @@ void main() {
         'COMPILER_INDEX_STORE_ENABLE=NO',
         '-archivePath', '/build/ios/archive/Runner',
         'archive',
-        if (showBuildSettings)
-          '-showBuildSettings',
       ],
       stdout: 'STDOUT STUFF',
       onRun: onRun,
@@ -128,6 +125,20 @@ void main() {
     expect(createTestCommandRunner(command).run(
       const <String>['build', 'ipa', '--no-pub']
     ), throwsToolExit(message: 'Application not configured for iOS'));
+  }, overrides: <Type, Generator>{
+    Platform: () => macosPlatform,
+    FileSystem: () => fileSystem,
+    ProcessManager: () => FakeProcessManager.any(),
+    XcodeProjectInterpreter: () => FakeXcodeProjectInterpreterWithBuildSettings(),
+  });
+
+  testUsingContext('ipa build fails in debug with code analysis', () async {
+    final BuildCommand command = BuildCommand();
+    createCoreMockProjectFiles();
+
+    expect(createTestCommandRunner(command).run(
+      const <String>['build', 'ipa', '--no-pub', '--debug', '--analyze-size']
+    ), throwsToolExit(message: '--analyze-size" can only be used on release builds'));
   }, overrides: <Type, Generator>{
     Platform: () => macosPlatform,
     FileSystem: () => fileSystem,
@@ -205,12 +216,12 @@ void main() {
     await createTestCommandRunner(command).run(
       const <String>['build', 'ipa', '--no-pub']
     );
+    expect(testLogger.statusText, contains('build/ios/archive/Runner.xcarchive'));
   }, overrides: <Type, Generator>{
     FileSystem: () => fileSystem,
     ProcessManager: () => FakeProcessManager.list(<FakeCommand>[
       xattrCommand,
       setUpFakeXcodeBuildHandler(),
-      setUpFakeXcodeBuildHandler(showBuildSettings: true),
     ]),
     Platform: () => macosPlatform,
     XcodeProjectInterpreter: () => FakeXcodeProjectInterpreterWithBuildSettings(),
@@ -228,17 +239,34 @@ void main() {
     ProcessManager: () => FakeProcessManager.list(<FakeCommand>[
       xattrCommand,
       setUpFakeXcodeBuildHandler(verbose: true),
-      setUpFakeXcodeBuildHandler(verbose: true, showBuildSettings: true),
     ]),
     Platform: () => macosPlatform,
     XcodeProjectInterpreter: () => FakeXcodeProjectInterpreterWithBuildSettings(),
+  });
+
+  testUsingContext('code size analysis fails when app not found', () async {
+    final BuildCommand command = BuildCommand();
+    createMinimalMockProjectFiles();
+
+    await expectToolExitLater(
+      createTestCommandRunner(command).run(
+          const <String>['build', 'ipa', '--no-pub', '--analyze-size']
+      ),
+      contains('Could not find app to analyze code size'),
+    );
+  }, overrides: <Type, Generator>{
+    FileSystem: () => fileSystem,
+    ProcessManager: () => FakeProcessManager.any(),
+    Platform: () => macosPlatform,
+    XcodeProjectInterpreter: () =>
+        FakeXcodeProjectInterpreterWithBuildSettings(),
   });
 
   testUsingContext('Performs code size analysis and sends analytics', () async {
     final BuildCommand command = BuildCommand();
     createMinimalMockProjectFiles();
 
-    fileSystem.file('build/ios/Release-iphoneos/Runner.app/Frameworks/App.framework/App')
+    fileSystem.file('build/ios/archive/Runner.xcarchive/Products/Applications/Runner.app/Frameworks/App.framework/App')
       ..createSync(recursive: true)
       ..writeAsBytesSync(List<int>.generate(10000, (int index) => 0));
 
@@ -271,7 +299,6 @@ void main() {
           ..createSync(recursive: true)
           ..writeAsStringSync('{}');
       }),
-      setUpFakeXcodeBuildHandler(showBuildSettings: true),
     ]),
     Platform: () => macosPlatform,
     FileSystemUtils: () => FileSystemUtils(fileSystem: fileSystem, platform: macosPlatform),
@@ -303,7 +330,6 @@ void main() {
     ProcessManager: () => FakeProcessManager.list(<FakeCommand>[
           xattrCommand,
           setUpFakeXcodeBuildHandler(),
-          setUpFakeXcodeBuildHandler(showBuildSettings: true),
           exportArchiveCommand,
         ]),
     Platform: () => macosPlatform,
